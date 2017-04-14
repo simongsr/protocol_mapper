@@ -1,0 +1,58 @@
+# il commento verrà ignorato
+reserved 23;
+reserved 25, 27, 29;
+reserved [90 , 99];
+# reserved [91, 93];
+
+VARIABILE_GLOBALE_1 = 'global var'
+
+__author__ = 'Simone Pandolfi <simopandolfi@gmail.com>'
+
+enum Enum_1 {  # altro commento
+    VAL1,
+    VAL2 = "Val_2",
+    prova,
+    VAL3 = 3.57
+}
+
+enum AddressType {
+    PHONE,
+    MOBILE,
+    EMAIL
+}
+
+model ModelloProva [abstract] [static = false] [final = true] [author = 'Simone Pandolfi <simopandolfi@gmail.com>'] {
+    enum NestedEnum { a, b, c }
+
+    model NestedModel {
+
+        model NestedModel {
+            optional int x = 11;
+        }
+
+        required string name  = 7;
+    }
+
+
+    required NestedModel test = 8;
+}
+
+model Model_1 {
+    required int    age       = 1 [half = 0.5];
+    optional string address   = 2 [default = "nonloso"];
+    repeated string pets      = 3 [dog = 'Fido'];
+    optional Enum_1 _enum     = 4 [value = Enum_1.VAL2];
+}
+
+message Message_1 {
+    required string name;
+    optional int  age       = 1;
+
+    message SubMessage {
+        optional string nullaDiChe;
+    }
+}
+
+# 0.2e-3
+# 0.1E5
+# .7e+2
