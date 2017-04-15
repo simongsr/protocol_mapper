@@ -1,0 +1,11 @@
+model GrandParent {
+
+    model Parent {
+
+        model Child {
+
+        }
+
+    }
+
+}

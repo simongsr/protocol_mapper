@@ -83,6 +83,29 @@ def find_column(token):
     return token.lexpos - (last_cr if last_cr >= 0 else 0)
 
 
+def make_model_field(multiplicity, datatype, name, _id, modifiers={}):
+    def check_type(label: str, var, _type):
+        if not isinstance(var, _type):
+            raise TypeError("{0} must be a {1}, got: {2}".format(label.title(), _type.__name__, type(var).__name__))
+
+    check_type('multiplicity', multiplicity, str)
+    check_type('name', name, str)
+    check_type('_id', _id, int)
+    check_type('modifiers', modifiers, dict)
+
+    if not isinstance(datatype, (str, list, dict)):
+        raise TypeError("Datatype must be a string, a list or a dict; got: {0}".format(type(datatype).__name__))
+
+    return {
+        'type'        : 'field',
+        'multiplicity': multiplicity,
+        'data_type'   : datatype,
+        'name'        : name,
+        'id'          : _id,
+        'modifiers'   : modifiers,
+    }
+
+
 def build_lexer() -> lex.Lexer:
 
     t_ASSIGN         = r'='
@@ -150,15 +173,15 @@ def build_parser() -> yacc.LRParser:
 
         def build(reservations=set(), module={}):
             return {
-                'reservations'    : reservations,
-                'module'          : module,
+                'reservations': reservations,
+                'module'      : module,
             }
 
         if len(p) == 3:
             env = build(p[1], p[2])
         else:
             if isinstance(p[1], dict):
-                env = build(objects=p[1])
+                env = build(module=p[1])
             else:
                 env = build(reservations=p[1])
         p[0] = env
@@ -195,11 +218,21 @@ def build_parser() -> yacc.LRParser:
 
     def p_message(p):
         r"""message : MESSAGE NAME modifier_collection LBRACKET message_definition RBRACKET"""
+
+        def fullname(name, objects: dict) -> dict:
+            for obj in objects.values():
+                obj['fullname'] = (name if isinstance(name, list) else [name]) + obj['fullname']
+                if obj['type'] == 'message':
+                    fullname(name, obj['objects'])
+            return objects
+
         p[0] = {
             'type'     : 'message',
             'name'     : p[2],
+            'fullname' : [p[2]],
             'modifiers': p[3],
-            'items'    : p[5],
+            'fields'   : p[5]['fields'],
+            'objects'  : fullname(p[2], p[5]['objects']),
         }
 
     def p_message_definition(p):
@@ -256,11 +289,21 @@ def build_parser() -> yacc.LRParser:
 
     def p_model(p):
         r"""model : MODEL NAME modifier_collection LBRACKET model_definition RBRACKET"""
+
+        def fullname(name, objects: dict) -> dict:
+            for obj in objects.values():
+                obj['fullname'] = (name if isinstance(name, list) else [name]) + obj['fullname']
+                if obj['type'] == 'model':
+                    fullname(name, obj['objects'])
+            return objects
+
         p[0] = {
             'type'     : 'model',
             'name'     : p[2],
+            'fullname' : [p[2]],
             'modifiers': p[3],
-            'items'    : p[5],
+            'fields'   : p[5]['fields'],
+            'objects'  : fullname(p[2], p[5]['objects']),
         }
 
     def p_model_definition(p):
@@ -304,14 +347,7 @@ def build_parser() -> yacc.LRParser:
         if _id in __reservations:
             raise Exception('[model field declaration] ID was marked as reserved: {0}'.format(_id))
 
-        p[0] = {
-            'type'        : 'field',
-            'multiplicity': p[1],
-            'data_type'   : p[2],
-            'name'        : p[3],
-            'id'          : _id,
-            'modifiers'   : p[6],
-        }
+        p[0] = make_model_field(p[1], p[2], p[3], _id, p[6])
 
     def p_field_multiplicity(p):
         r"""field_multiplicity : REQUIRED
@@ -371,9 +407,10 @@ def build_parser() -> yacc.LRParser:
     def p_enum(p):
         r"""enum : ENUM NAME LBRACKET enum_definition RBRACKET"""
         p[0] = {
-            'type' : 'enum',
-            'name' : p[2],
-            'items': p[4],
+            'type'    : 'enum',
+            'name'    : p[2],
+            'fullname': [p[2]],
+            'items'   : p[4],
         }
 
     def p_enum_definition(p):
@@ -404,7 +441,7 @@ def build_parser() -> yacc.LRParser:
             ids = ids if isinstance(ids, set) else {_id for _id in ids}
             intersection = collection.intersection(ids)
             if any(intersection):
-                raise Exception('[reservation] Duplicated ID: {0}'.format(', '.join(str(_id) for _id in intersection)))
+                raise Exception('[reservation] Duplicated IDs: {0}'.format(', '.join(str(_id) for _id in intersection)))
             collection.update(ids)
             return collection
 
@@ -460,13 +497,71 @@ def parse(_input):
             type(_input).__name__)
         )
 
-    if not isinstance(_input, str):
+    if isinstance(_input, str):
+        with open(_input, 'r') as fp:
+            _input = fp.read()
+    else:
         _input = _input.read()
 
     return build_parser().parse(_input)
 
 
 def build(config):
+    __used_ids = set()
+
+    def get_model(objects, modelname, path=[]):
+        if not isinstance(modelname, (str, list)):
+            raise TypeError("Expected 'modelname' was a string or a list, got: {0}".format(type(modelname).__name__))
+
+        if isinstance(modelname, str):
+            modelname = modelname.split('.')
+
+        if modelname[0] not in objects:
+            raise Exception("Unknown model: {0}".format('.'.join(path + [modelname[0]])))
+
+        if len(modelname) > 1:
+            return get_model(objects[modelname[0]]['objects'], modelname[1:], path='.'.join(path + [modelname[0]]))
+
+        if objects[modelname[0]]['type'] not in ('model', 'enum'):
+            raise Exception("Unknown model, got: {0} {1}".format(
+                objects[modelname[0]]['type'], '.'.join(path + [modelname[0]])))
+
+        return objects[modelname[0]]
+
+    def build_model_graph(reservations, model, objects):
+        nonlocal __used_ids
+
+        if model['type'] != 'model':
+            return
+
+        for item in model['fields'].values():
+            _id = item['id']
+            if _id > 0:
+                if _id in reservations:
+                    raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
+                        '.'.join(model['fullname']), item['name'], _id))
+                if _id in __used_ids:
+                    raise Exception("ID already in use: {0}.{1} = {2}".format(
+                        '.'.join(model['fullname']), item['name'], _id))
+                __used_ids.add(_id)
+
+                item['model'] = model  # creates a backward reference (from field to its parent model)
+
+                if not isinstance(item['data_type'], str):
+                    referenced_object = get_model(objects, item['data_type'])
+
+                    item['data_type'] = referenced_object
+
+                    if referenced_object['type'] == 'model':
+                        reverse_reference_name = '{0}_set'.format('__'.join(model['fullname'])).lower()
+                        if reverse_reference_name not in referenced_object['fields']:
+                            # creates a backward reference (from parent model to referenced model)
+                            referenced_object['fields'][reverse_reference_name] = make_model_field(
+                                'repeated', model, reverse_reference_name, - item['id'])
+
+        for obj in model['objects'].values():
+            build_model_graph(reservations, obj, objects)
+
     if not isinstance(config, (str, ConfigStruct)):
         raise TypeError('Expected config was a string or a ConfigStruct, got: {}'.format(type(config).__name__))
 
@@ -474,12 +569,9 @@ def build(config):
         config = ConfigStruct(config)
 
     environment = {
-        'reservations': {},
-        'modules'     : [],
+        'reservations': set(),
+        'objects'     : {},
     }
-
-    obj_names   = {}  # set of all objects names defined at root level
-    dobj_names  = {}  # set of all duplicated objects names defined at root level
 
     for modulename in config.modules:
         module       = parse(modulename)
@@ -487,18 +579,27 @@ def build(config):
         # merges the IDs set
         intersection = module['reservations'].intersection(environment['reservations'])
         if any(intersection):
-            raise Exception("Duplicated object names: {0}".format(', '.join(intersection)))
+            raise Exception('[reservation] Duplicated IDs: {0}'.format(', '.join(str(_id) for _id in intersection)))
         environment['reservations'].update(module['reservations'])
 
         # merges the modules
-        names        = set(module['module']['objects'].keys())
-        intersection = names.intersection(obj_names)
-        obj_names.update(names)
-        dobj_names.update(intersection)
-        environment['modules'].append(module['module'])
+        intersection = set(module['module']['objects'].keys()).intersection(set(environment['objects'].keys()))
+        if any(intersection):
+            raise Exception("Duplicated objects names: {0}".format(', '.join(intersection)))
 
-    # TODO validare gli ID
+        for obj in module['module']['objects'].values():
+            obj['vars'] = module['module']['vars']  # inserts module's variables into the object
+
+        environment['objects'].update(module['module']['objects'])
+
+    # IDs validation
+    for obj in environment['objects'].values():
+        build_model_graph(environment['reservations'], obj, environment['objects'])
+        # TODO deve costruire anche il grafo dei messaggi
+
     # TODO creare il grafo ed i reverse reference
+
+    return environment
 
 
 class ConfigStruct:
@@ -531,8 +632,9 @@ if __name__ == '__main__':
     from pprint import PrettyPrinter
     PP = PrettyPrinter(indent=True)
 
-    # with open('test1.promap') as fp:
-    #     PP.pprint(parse(fp))
+    #PP.pprint(parse('test1.promap'))
 
     config = ConfigStruct('test_config.json')
-    PP.pprint(config.modules)
+    # PP.pprint(config.modules)
+    env = build(config)
+    PP.pprint(env)

@@ -34,7 +34,8 @@ model ModelloProva [abstract] [static = false] [final = true] [author = 'Simone 
     }
 
 
-    required NestedModel test = 8;
+    required ModelloProva.NestedModel test = 8;
+    #optional Message_1 msg = 72;
 }
 
 model Model_1 {
