@@ -507,7 +507,7 @@ def parse(_input):
 
 
 def build(config):
-    __used_ids = set()
+    __fields = {}
 
     def get_model(objects, modelname, path=[]):
         if not isinstance(modelname, (str, list)):
@@ -529,38 +529,95 @@ def build(config):
         return objects[modelname[0]]
 
     def build_model_graph(reservations, model, objects):
-        nonlocal __used_ids
+        nonlocal __fields
 
         if model['type'] != 'model':
             return
 
-        for item in model['fields'].values():
-            _id = item['id']
+        for field in model['fields'].values():
+            _id = field['id']
             if _id > 0:
                 if _id in reservations:
                     raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
-                        '.'.join(model['fullname']), item['name'], _id))
-                if _id in __used_ids:
+                        '.'.join(model['fullname']), field['name'], _id))
+                if _id in __fields:
                     raise Exception("ID already in use: {0}.{1} = {2}".format(
-                        '.'.join(model['fullname']), item['name'], _id))
-                __used_ids.add(_id)
+                        '.'.join(model['fullname']), field['name'], _id))
+                __fields[_id]  = field
 
-                item['model'] = model  # creates a backward reference (from field to its parent model)
+                field['model'] = model  # creates a backward reference (from field to its parent model)
 
-                if not isinstance(item['data_type'], str):
-                    referenced_object = get_model(objects, item['data_type'])
+                if not isinstance(field['data_type'], str):
+                    referenced_object = get_model(objects, field['data_type'])
 
-                    item['data_type'] = referenced_object
+                    field['data_type'] = referenced_object
 
                     if referenced_object['type'] == 'model':
                         reverse_reference_name = '{0}_set'.format('__'.join(model['fullname'])).lower()
                         if reverse_reference_name not in referenced_object['fields']:
                             # creates a backward reference (from parent model to referenced model)
                             referenced_object['fields'][reverse_reference_name] = make_model_field(
-                                'repeated', model, reverse_reference_name, - item['id'])
+                                'repeated', model, reverse_reference_name, - field['id'])
 
         for obj in model['objects'].values():
             build_model_graph(reservations, obj, objects)
+
+    def get_message(objects, messagename, path=[]):
+        if not isinstance(messagename, (str, list)):
+            raise TypeError("Expected 'messagename' was a string or a list, got: {0}".format(
+                type(messagename).__name__))
+
+        if isinstance(messagename, str):
+            messagename = messagename.split('.')
+
+        if messagename[0] not in objects:
+            raise Exception("Unknown message: {0}".format('.'.join(path + [messagename[0]])))
+
+        if len(messagename) > 1:
+            return get_message(
+                objects[messagename[0]]['objects'],
+                messagename[1:],
+                path='.'.join(path + [messagename[0]])
+            )
+
+        if objects[messagename[0]]['type'] not in ('message', 'enum'):
+            raise Exception("Unknown message, got: {0} {1}".format(
+                objects[messagename[0]]['type'], '.'.join(path + [messagename[0]])))
+
+        return objects[messagename[0]]
+
+    def build_message_graph(reservations, message, objects):
+        nonlocal __fields
+
+        if message['type'] != 'message':
+            return
+
+        for field in message['fields'].values():
+            _id = field['id']
+            if _id is not None:
+                if _id in reservations:
+                    raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
+                        '.'.join(message['fullname']), field['name'], _id))
+                if not isinstance(field['data_type'], str):
+                    raise Exception('Only raw types are allowed for mapping in a message: {0}.{1} = {2}'.format(
+                        '.'.join(message['fullname']), field['name'], _id))
+                if _id not in __fields:
+                    raise Exception("Unknown mapping: {0}.{1} = {2}".format(
+                        '.'.join(message['fullname']), field['name'], _id))
+
+                model_field = __fields[_id]  # mapped model field
+
+                if field['data_type'] != model_field['data_type']:
+                    raise Exception('Mapping types mismatched: {0}.{1} = {2} -> {3}.{4} = {5}'.format(
+                        '.'.join(message['fullname']), field['name'], _id,
+                        '.'.join(model_field['model']['fullname']), model_field['name'], _id))
+
+            elif not isinstance(field['data_type'], str):
+                referenced_object  = get_message(objects, field['data_type'])
+
+                field['data_type'] = referenced_object
+
+                # TODO aggiungere anche un riferimento reverso? -- Su questo riflettere io devo
 
     if not isinstance(config, (str, ConfigStruct)):
         raise TypeError('Expected config was a string or a ConfigStruct, got: {}'.format(type(config).__name__))
@@ -592,12 +649,10 @@ def build(config):
 
         environment['objects'].update(module['module']['objects'])
 
-    # IDs validation
+    # builds models and messages graphs
     for obj in environment['objects'].values():
         build_model_graph(environment['reservations'], obj, environment['objects'])
-        # TODO deve costruire anche il grafo dei messaggi
-
-    # TODO creare il grafo ed i reverse reference
+        build_message_graph(environment['reservations'], obj, environment['objects'])
 
     return environment
 

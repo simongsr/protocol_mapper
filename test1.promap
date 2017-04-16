@@ -48,6 +48,7 @@ model Model_1 {
 message Message_1 {
     required string name;
     optional int  age       = 1;
+    optional Message_1.SubMessage messaggio;
 
     message SubMessage {
         optional string nullaDiChe;
