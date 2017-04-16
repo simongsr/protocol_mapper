@@ -528,39 +528,43 @@ def build(config):
 
         return objects[modelname[0]]
 
-    def build_model_graph(reservations, model, objects):
+    def build_model_graph(environment):  #reservations, model, objects):
         nonlocal __fields
 
-        if model['type'] != 'model':
-            return
+        def build(reservations, objects, model):
+            if model['type'] != 'model':
+                return
 
-        for field in model['fields'].values():
-            _id = field['id']
-            if _id > 0:
-                if _id in reservations:
-                    raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
-                        '.'.join(model['fullname']), field['name'], _id))
-                if _id in __fields:
-                    raise Exception("ID already in use: {0}.{1} = {2}".format(
-                        '.'.join(model['fullname']), field['name'], _id))
-                __fields[_id]  = field
+            for field in model['fields'].values():
+                _id = field['id']
+                if _id > 0:
+                    if _id in reservations:
+                        raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
+                            '.'.join(model['fullname']), field['name'], _id))
+                    if _id in __fields:
+                        raise Exception("ID already in use: {0}.{1} = {2}".format(
+                            '.'.join(model['fullname']), field['name'], _id))
+                    __fields[_id]  = field
 
-                field['model'] = model  # creates a backward reference (from field to its parent model)
+                    field['model'] = model  # creates a backward reference (from field to its parent model)
 
-                if not isinstance(field['data_type'], str):
-                    referenced_object = get_model(objects, field['data_type'])
+                    if not isinstance(field['data_type'], str):
+                        referenced_object = get_model(objects, field['data_type'])
 
-                    field['data_type'] = referenced_object
+                        field['data_type'] = referenced_object
 
-                    if referenced_object['type'] == 'model':
-                        reverse_reference_name = '{0}_set'.format('__'.join(model['fullname'])).lower()
-                        if reverse_reference_name not in referenced_object['fields']:
-                            # creates a backward reference (from parent model to referenced model)
-                            referenced_object['fields'][reverse_reference_name] = make_model_field(
-                                'repeated', model, reverse_reference_name, - field['id'])
+                        if referenced_object['type'] == 'model':
+                            reverse_reference_name = '{0}_set'.format('__'.join(model['fullname'])).lower()
+                            if reverse_reference_name not in referenced_object['fields']:
+                                # creates a backward reference (from parent model to referenced model)
+                                referenced_object['fields'][reverse_reference_name] = make_model_field(
+                                    'repeated', model, reverse_reference_name, - field['id'])
 
-        for obj in model['objects'].values():
-            build_model_graph(reservations, obj, objects)
+            for obj in model['objects'].values():
+                build(reservations, objects, obj)
+
+        for obj in environment['objects'].values():
+            build(environment['reservations'], environment['objects'], obj)
 
     def get_message(objects, messagename, path=[]):
         if not isinstance(messagename, (str, list)):
@@ -586,38 +590,42 @@ def build(config):
 
         return objects[messagename[0]]
 
-    def build_message_graph(reservations, message, objects):
+    def build_message_graph(environment):
         nonlocal __fields
 
-        if message['type'] != 'message':
-            return
+        def build(reservations, objects, message):
+            if message['type'] != 'message':
+                return
 
-        for field in message['fields'].values():
-            _id = field['id']
-            if _id is not None:
-                if _id in reservations:
-                    raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
-                        '.'.join(message['fullname']), field['name'], _id))
-                if not isinstance(field['data_type'], str):
-                    raise Exception('Only raw types are allowed for mapping in a message: {0}.{1} = {2}'.format(
-                        '.'.join(message['fullname']), field['name'], _id))
-                if _id not in __fields:
-                    raise Exception("Unknown mapping: {0}.{1} = {2}".format(
-                        '.'.join(message['fullname']), field['name'], _id))
+            for field in message['fields'].values():
+                _id = field['id']
+                if _id is not None:
+                    if _id in reservations:
+                        raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
+                            '.'.join(message['fullname']), field['name'], _id))
+                    if not isinstance(field['data_type'], str):
+                        raise Exception('Only raw types are allowed for mapping in a message: {0}.{1} = {2}'.format(
+                            '.'.join(message['fullname']), field['name'], _id))
+                    if _id not in __fields:
+                        raise Exception("Unknown mapping: {0}.{1} = {2}".format(
+                            '.'.join(message['fullname']), field['name'], _id))
 
-                model_field = __fields[_id]  # mapped model field
+                    model_field = __fields[_id]  # mapped model field
 
-                if field['data_type'] != model_field['data_type']:
-                    raise Exception('Mapping types mismatched: {0}.{1} = {2} -> {3}.{4} = {5}'.format(
-                        '.'.join(message['fullname']), field['name'], _id,
-                        '.'.join(model_field['model']['fullname']), model_field['name'], _id))
+                    if field['data_type'] != model_field['data_type']:
+                        raise Exception('Mapping types mismatched: {0}.{1} = {2} -> {3}.{4} = {5}'.format(
+                            '.'.join(message['fullname']), field['name'], _id,
+                            '.'.join(model_field['model']['fullname']), model_field['name'], _id))
 
-            elif not isinstance(field['data_type'], str):
-                referenced_object  = get_message(objects, field['data_type'])
+                elif not isinstance(field['data_type'], str):
+                    referenced_object  = get_message(objects, field['data_type'])
 
-                field['data_type'] = referenced_object
+                    field['data_type'] = referenced_object
 
-                # TODO aggiungere anche un riferimento reverso? -- Su questo riflettere io devo
+                    # TODO aggiungere anche un riferimento reverso? -- Su questo riflettere io devo
+
+        for obj in environment['objects'].values():
+            build(environment['reservations'], environment['objects'], obj)
 
     if not isinstance(config, (str, ConfigStruct)):
         raise TypeError('Expected config was a string or a ConfigStruct, got: {}'.format(type(config).__name__))
@@ -650,9 +658,8 @@ def build(config):
         environment['objects'].update(module['module']['objects'])
 
     # builds models and messages graphs
-    for obj in environment['objects'].values():
-        build_model_graph(environment['reservations'], obj, environment['objects'])
-        build_message_graph(environment['reservations'], obj, environment['objects'])
+    build_model_graph(environment)
+    build_message_graph(environment)
 
     return environment
 
@@ -673,23 +680,21 @@ class ConfigStruct:
     def modules(self) -> iter:
         return iter(self.__modules)
 
-"""
-
-{
-    "modules": []
-}
-
-"""
-
 
 if __name__ == '__main__':
 
     from pprint import PrettyPrinter
     PP = PrettyPrinter(indent=True)
 
+    from datetime import datetime
+    t1 = datetime.now()
     #PP.pprint(parse('test1.promap'))
 
     config = ConfigStruct('test_config.json')
     # PP.pprint(config.modules)
     env = build(config)
     PP.pprint(env)
+
+    t2 = datetime.now()
+
+    print('\n\n{0}'.format(t2 - t1))
