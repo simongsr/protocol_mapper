@@ -606,9 +606,10 @@ def build(config):
                     if not isinstance(field['data_type'], str):
                         raise Exception('Only raw types are allowed for mapping in a message: {0}.{1} = {2}'.format(
                             '.'.join(message['fullname']), field['name'], _id))
-                    if _id not in __fields:
-                        raise Exception("Unknown mapping: {0}.{1} = {2}".format(
-                            '.'.join(message['fullname']), field['name'], _id))
+                    # existence of a mapping field is ignored
+                    # if _id not in __fields:
+                    #     raise Exception("Unknown mapping: {0}.{1} = {2}".format(
+                    #         '.'.join(message['fullname']), field['name'], _id))
 
                     model_field = __fields[_id]  # mapped model field
 
