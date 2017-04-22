@@ -1,3 +1,10 @@
 {
-  "modules": ["test1.promap"]
+  "builds": [
+    {
+      "builder": "python_django",
+      "params": [],
+      "enabled": true,
+      "modules": ["test1.promap"]
+    }
+  ]
 }

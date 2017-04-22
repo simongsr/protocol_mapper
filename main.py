@@ -1,10 +1,12 @@
 #!/usr/bin/env python3.5
+import importlib
 import json
 from collections import OrderedDict
 from datetime import date, datetime
 from functools import reduce
 
 import jsonpath_rw
+from cerberus import Validator
 from ply import lex, yacc
 
 __author__  = 'Simone Pandolfi <simopandolfi@gmail.com>'
@@ -506,7 +508,7 @@ def parse(_input):
     return build_parser().parse(_input)
 
 
-def build(config):
+def build(modules, buildername, params=[]):
     __fields = {}
 
     def get_model(objects, modelname, path=[]):
@@ -628,18 +630,19 @@ def build(config):
         for obj in environment['objects'].values():
             build(environment['reservations'], environment['objects'], obj)
 
-    if not isinstance(config, (str, ConfigStruct)):
-        raise TypeError('Expected config was a string or a ConfigStruct, got: {}'.format(type(config).__name__))
-
-    if isinstance(config, str):
-        config = ConfigStruct(config)
+    if not hasattr(modules, '__iter__') or not callable(modules.__iter__):
+        raise TypeError('Expected "modules" was a collection of strings, got {0}'.format(type(modules).__name__))
+    if not isinstance(buildername, str):
+        raise TypeError('Builder must be the name of a builder, got {0}'.format(type(buildername).__name__))
+    if not hasattr(params, '__iter__') or not callable(params.__iter__):
+        raise TypeError('Expected "params" was a collection of strings, got {0}'.format(type(params).__name__))
 
     environment = {
         'reservations': set(),
         'objects'     : {},
     }
 
-    for modulename in config.modules:
+    for modulename in modules:
         module       = parse(modulename)
 
         # merges the IDs set
@@ -662,11 +665,15 @@ def build(config):
     build_model_graph(environment)
     build_message_graph(environment)
 
-    return environment
+    # makes
+    builder = importlib.import_module('builders.{0}'.format(buildername))
+    if not hasattr(builder, 'make') or not callable(builder.make):
+        raise NameError("Missing 'make' function in builder: {0}".format(buildername))
+    builder.make(params, environment)
 
 
 class ConfigStruct:
-    __slots__ = ('__modules',)
+    __slots__ = ('__builds',)
 
     def __init__(self, config_filepath):
         if not isinstance(config_filepath, str):
@@ -675,26 +682,67 @@ class ConfigStruct:
         with open(config_filepath, 'r') as fp:
             buff = json.load(fp)
 
-        self.__modules = [match.value for match in jsonpath_rw.parse('modules[*]').find(buff)]
+        self.__builds = {
+            builddef['builder']: builddef
+                for builddef in [
+                    ConfigStruct.__validate_build(builddef.value)
+                        for builddef in jsonpath_rw.parse('builds[*]').find(buff)
+                ]
+        }
+
+    @staticmethod
+    def __validate_build(builddef):
+        schema = {
+            'builder': {'type': 'string'},
+            'params' : {'type': 'list', 'schema': {'type': 'string'}},
+            'enabled': {'type': 'boolean'},
+            'modules': {'type': 'list', 'schema': {'type': 'string'}},
+        }
+
+        validator = Validator(schema)
+        if not validator.validate(builddef):
+            raise SyntaxError("Invalid build definition: {0}".format(builddef))
+        return builddef
 
     @property
-    def modules(self) -> iter:
-        return iter(self.__modules)
+    def builds(self):
+        return (buildname for buildname in self.__builds)
+
+    def get_modules(self, buildname):
+        if buildname not in self.__builds:
+            return []
+        return self.__builds[buildname]['modules']
+
+    def get_params(self, buildname):
+        if buildname not in self.__builds:
+            return []
+        return self.__builds[buildname]['params']
+
+    def build(self, buildname=None):
+        if not isinstance(buildname, str) and buildname is not None:
+            raise TypeError('Expected "buildname" was a string or None, got {0}'.format(type(buildname).__name__))
+
+        if buildname is None:
+            for buildname in self.builds:
+                self.build(buildname=buildname)
+        else:
+            build(self.get_modules(buildname), buildname, self.get_params(buildname))
 
 
 if __name__ == '__main__':
 
-    from pprint import PrettyPrinter
-    PP = PrettyPrinter(indent=True)
+    # from pprint import PrettyPrinter
+    # PP = PrettyPrinter(indent=True)
 
-    from datetime import datetime
     t1 = datetime.now()
     #PP.pprint(parse('test1.promap'))
 
     config = ConfigStruct('test_config.json')
-    # PP.pprint(config.modules)
-    env = build(config)
-    PP.pprint(env)
+    # for buildname in config.builds:
+    #     PP.pprint(build)
+    #     env = build(config.get_modules(buildname))
+    #     PP.pprint(env)
+    config.build()
 
     t2 = datetime.now()
 
