@@ -2,7 +2,9 @@
   "builds": [
     {
       "builder": "python_django",
-      "params": [],
+      "params": {
+        "outdir": "/home/simone/PycharmProjects/out_test_protocol_mapper"
+      },
       "enabled": true,
       "modules": ["test1.promap"]
     }

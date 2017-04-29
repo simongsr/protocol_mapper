@@ -9,7 +9,8 @@ import jsonpath_rw
 from cerberus import Validator
 from ply import lex, yacc
 
-__author__  = 'Simone Pandolfi <simopandolfi@gmail.com>'
+__author__  = 'Simone Pandolfi'
+__email__   = '<simopandolfi@gmail.com>'
 __version__ = (0, 0, 1)
 
 
@@ -85,7 +86,7 @@ def find_column(token):
     return token.lexpos - (last_cr if last_cr >= 0 else 0)
 
 
-def make_model_field(multiplicity, datatype, name, _id, modifiers={}):
+def make_model_field(multiplicity, datatype, name, _id, modifiers={}, source_field=None):
     def check_type(label: str, var, _type):
         if not isinstance(var, _type):
             raise TypeError("{0} must be a {1}, got: {2}".format(label.title(), _type.__name__, type(var).__name__))
@@ -98,6 +99,9 @@ def make_model_field(multiplicity, datatype, name, _id, modifiers={}):
     if not isinstance(datatype, (str, list, dict)):
         raise TypeError("Datatype must be a string, a list or a dict; got: {0}".format(type(datatype).__name__))
 
+    if not isinstance(source_field, dict) and source_field is not None:
+        raise TypeError("Source filed must be a dict or None; got: {0}".format(type(source_field).__name__))
+
     return {
         'type'        : 'field',
         'multiplicity': multiplicity,
@@ -105,6 +109,7 @@ def make_model_field(multiplicity, datatype, name, _id, modifiers={}):
         'name'        : name,
         'id'          : _id,
         'modifiers'   : modifiers,
+        'source_field': source_field,
     }
 
 
@@ -275,8 +280,11 @@ def build_parser() -> yacc.LRParser:
         nonlocal __reservations
 
         def build(multiplicity, data_type, name, modifiers, _id=None):
-            if _id is not None and _id in __reservations:
-                raise Exception('[message field declaration] ID was marked as reserved: {0}'.format(_id))
+            if _id is not None:
+                if _id in __reservations:
+                    raise Exception('[message field declaration] ID was marked as reserved: {0}'.format(_id))
+                if _id <= 0:
+                    raise Exception('[message field declaration] ID must be greater than zero: {0}'.format(_id))
 
             return {
                 'type'        : 'field',
@@ -319,8 +327,8 @@ def build_parser() -> yacc.LRParser:
 
         def get_blank():
             return {
-                'objects': {},
-                'fields' : {},
+                'objects': OrderedDict(),
+                'fields' : OrderedDict(),
             }
 
         def insert(content, item):
@@ -348,6 +356,8 @@ def build_parser() -> yacc.LRParser:
         _id = p[5]
         if _id in __reservations:
             raise Exception('[model field declaration] ID was marked as reserved: {0}'.format(_id))
+        if _id <= 0:
+            raise Exception('[model field declaration] ID must be greater than zero: {0}'.format(_id))
 
         p[0] = make_model_field(p[1], p[2], p[3], _id, p[6])
 
@@ -400,7 +410,7 @@ def build_parser() -> yacc.LRParser:
                 raise Exception('[modifier collection] Duplicated key: {0}'.format(key))
             collection[key]     = value
         else:
-            collection          = {}
+            collection          = OrderedDict()
             if len(p) == 4:
                 key, value      = key_value(p[2])
                 collection[key] = value
@@ -424,7 +434,7 @@ def build_parser() -> yacc.LRParser:
         def add(collection, aux):
             # if aux is an instance of a tuple, than it means that the parser recognized it as a 'name_assignment',
             # otherwise is has been intended as a 'NAME'
-            key, value = aux if isinstance(aux, tuple) else aux, len(collection)
+            key, value = aux if isinstance(aux, tuple) else (aux, len(collection))
             if key in collection:
                 raise Exception('[enum definition] Duplicated key: {0}'.format(key))
             collection[key] = value
@@ -530,12 +540,14 @@ def build(modules, buildername, params=[]):
 
         return objects[modelname[0]]
 
-    def build_model_graph(environment):  #reservations, model, objects):
+    def build_model_graph(environment):
         nonlocal __fields
 
-        def build(reservations, objects, model):
+        def build(reservations, objects, model, parent_model=None):
             if model['type'] != 'model':
                 return
+
+            model['parent'] = parent_model
 
             for field in model['fields'].values():
                 _id = field['id']
@@ -560,10 +572,10 @@ def build(modules, buildername, params=[]):
                             if reverse_reference_name not in referenced_object['fields']:
                                 # creates a backward reference (from parent model to referenced model)
                                 referenced_object['fields'][reverse_reference_name] = make_model_field(
-                                    'repeated', model, reverse_reference_name, - field['id'])
+                                    'repeated', model, reverse_reference_name, - field['id'], source_field=field)
 
             for obj in model['objects'].values():
-                build(reservations, objects, obj)
+                build(reservations, objects, obj, parent_model=model)
 
         for obj in environment['objects'].values():
             build(environment['reservations'], environment['objects'], obj)
@@ -595,9 +607,11 @@ def build(modules, buildername, params=[]):
     def build_message_graph(environment):
         nonlocal __fields
 
-        def build(reservations, objects, message):
+        def build(reservations, objects, message, parent_message=None):
             if message['type'] != 'message':
                 return
+
+            message['parent'] = parent_message
 
             for field in message['fields'].values():
                 _id = field['id']
@@ -626,6 +640,9 @@ def build(modules, buildername, params=[]):
                     field['data_type'] = referenced_object
 
                     # TODO aggiungere anche un riferimento reverso? -- Su questo riflettere io devo
+
+                for obj in message['objects'].values():
+                    build(reservations, objects, obj, parent_message=message)
 
         for obj in environment['objects'].values():
             build(environment['reservations'], environment['objects'], obj)
@@ -667,9 +684,9 @@ def build(modules, buildername, params=[]):
 
     # makes
     builder = importlib.import_module('builders.{0}'.format(buildername))
-    if not hasattr(builder, 'make') or not callable(builder.make):
+    if not hasattr(builder, 'build') or not callable(builder.build):
         raise NameError("Missing 'make' function in builder: {0}".format(buildername))
-    builder.make(params, environment)
+    builder.build(environment, **params)
 
 
 class ConfigStruct:
@@ -694,7 +711,7 @@ class ConfigStruct:
     def __validate_build(builddef):
         schema = {
             'builder': {'type': 'string'},
-            'params' : {'type': 'list', 'schema': {'type': 'string'}},
+            'params' : {'type': 'dict', 'keyschema': {'type': 'string'}},
             'enabled': {'type': 'boolean'},
             'modules': {'type': 'list', 'schema': {'type': 'string'}},
         }
