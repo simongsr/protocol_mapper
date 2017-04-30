@@ -25,7 +25,7 @@ __version__ = {{ version }}
 
 
 {%- macro make_model(model) %}
-{% if 'python_django__builtin' not in model.modifiers or model.modifiers.python_django__builtin == False or 'builtin' not in model.modifiers or model.modifiers.builtin == False %}
+{% if ('python_django__builtin' not in model.modifiers and 'builtin' not in model.modifiers) or model.modifiers.python_django__builtin == False or model.modifiers.builtin == False %}
 
 class {{ model.fullname|join('__') }}(models.Model):
     {% for obj in model.objects.values() if obj.type == 'enum' %}
