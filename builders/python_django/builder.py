@@ -5,6 +5,7 @@ from pprint import PrettyPrinter
 import jinja2
 
 from filters import core
+from filters import python
 from filters import python_django
 
 __author__  = 'Simone Pandolfi'
@@ -16,6 +17,7 @@ __TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'templates')
 __ENVIRONMENT   = jinja2.Environment(
     loader=jinja2.FileSystemLoader(__TEMPLATES_DIR), trim_blocks=True, lstrip_blocks=True)
 __ENVIRONMENT.filters.update(core.FILTERS)
+__ENVIRONMENT.filters.update(python.FILTERS)
 __ENVIRONMENT.filters.update(python_django.FILTERS)
 
 
@@ -37,7 +39,9 @@ def __create_outdir_if_not_exists(outdir=os.path.dirname(__file__)):
 def __build_models(env, outdir=None):
     template = __ENVIRONMENT.get_template('models.py')
     context  = {
-        'models': [obj for obj in core.root_models(env)],
+        'models'  : [obj for obj in core.root_models(env)],
+        'messages': [obj for obj in core.root_messages(env)],
+        # TODO inserire anche i root enums
     }
     source   = template.render(context)
     print(source)

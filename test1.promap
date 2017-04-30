@@ -66,11 +66,23 @@ model Person [python_django__builtin = false] {
 
 model User [builtin] {
     # used for mapping between custom objects and builtin objects
+    required string first_name = 1001;
+    required string last_name  = 1002;
+    required string email      = 1003;
+    required string username   = 1004;
 }
 
 model UserProfile {
     required User user = 101;
     optional int  age  = 102 [null = false];
+}
+
+
+message UserInfo {
+    required string name        = 1001;
+    required string surname     = 1002;
+    optional int    age         = 102;
+    optional string description;
 }
 
 # message Message_1 {

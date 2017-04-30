@@ -33,13 +33,16 @@ class {{ model.fullname|join('__') }}(models.Model):
 
     {% endfor %}
     {% for field in model.fields.values() if field.id > 0 %}
-    {{ field.name }} = {{ field | python_django.field_declaration }}
+    {{ field.name }} = {{ field|python_django.field_declaration }}
     {% endfor %}
-    {% for field in model.fields.values() if field.id > 0 and field.multiplicity in ('optional', 'required') and field.data_type.type == 'model' %}
 
+    def __str__(self):
+        return '{{ model.fullname|join("__") }}: {0}'.format(self.id)
+
+    {% for field in model.fields.values() if field.id > 0 and field.multiplicity in ('optional', 'required') and field.data_type.type == 'model' %}
     @classmethod
     def get_{{ field.name }}_class(cls):
-        return {{ field.data_type.fullname | join('__') }}
+        return {{ field.data_type.fullname|join('__') }}
     {% endfor %}
     {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
 
@@ -56,8 +59,43 @@ class {{ model.fullname|join('__') }}(models.Model):
 
 class __{{ field.model.fullname|join('__') }}___{{ field.name }}(models.Model):
     value = models.{{ field.data_type|python_django.map_data_type }}()
+
+    def __str__(self):
+        return '__{{ field.model.fullname|join("__") }}___{{ field.name }}: {0}'.format(self.id)
     {% endfor %}
 {% endif %}
+{% endmacro %}
+
+
+{% macro make_message(message) %}
+class {{ message.fullname|join('__') }}:
+    def __init__(self):
+        {% for field in message.fields.values() %}
+        self.__{{ field.name }} = None
+        {% endfor %}
+
+    {% for field in message.fields.values() %}
+    @property
+    def {{field.name}}(self):
+        return self.__{{ field.name }}
+
+    @{{ field.name }}.setter
+    def {{ field.name }}(self, value):
+        if not isinstance(value, {{ field.data_type|python.map_data_type }}):
+            raise TypeError("Expected '{{ field.name }}' is a {{ field.data_type|python.map_data_type }}, got: {0}".format(type(value).__name__))
+        self.__{{ field.name }} = value
+
+    {% endfor %}
+    {% for modelname, fieldlist in (message|core.map_message_field_to_model).items() %}
+    def load_model_{{ modelname|replace('.', '__') }}(self, model):
+        if not isinstance(model, {{ modelname|replace('.', '__') }}):
+            raise TypeError("Model must be an instance of {{ modelname|replace('.', '__') }}, got: {0}".format(type(model).__name__))
+
+        {% for field in fieldlist %}
+        self.{{ field.name }} = model.{{ field.model_field.name }}
+        {% endfor %}
+
+    {% endfor %}
 {% endmacro %}
 
 
@@ -65,3 +103,7 @@ class __{{ field.model.fullname|join('__') }}___{{ field.name }}(models.Model):
 {% for model in models %}
 {{ make_model(model) }}
 {% endfor -%}
+
+{% for message in messages %}
+{{ make_message(message) }}
+{% endfor %}

@@ -253,7 +253,7 @@ def build_parser() -> yacc.LRParser:
         def get_blank():
             return {
                 'objects': OrderedDict(),
-                'fields' : {},
+                'fields' : OrderedDict(),
             }
 
         def insert(content, item):
@@ -627,12 +627,14 @@ def build(modules, buildername, params=[]):
                     #     raise Exception("Unknown mapping: {0}.{1} = {2}".format(
                     #         '.'.join(message['fullname']), field['name'], _id))
 
-                    model_field = __fields[_id]  # mapped model field
+                    model_field = __fields.get(_id, None)  # mapped model field
 
                     if field['data_type'] != model_field['data_type']:
                         raise Exception('Mapping types mismatched: {0}.{1} = {2} -> {3}.{4} = {5}'.format(
                             '.'.join(message['fullname']), field['name'], _id,
                             '.'.join(model_field['model']['fullname']), model_field['name'], _id))
+
+                    field['model_field'] = model_field
 
                 elif not isinstance(field['data_type'], str):
                     referenced_object  = get_message(objects, field['data_type'])
