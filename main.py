@@ -170,7 +170,7 @@ def build_lexer() -> lex.Lexer:
 
 def build_parser() -> yacc.LRParser:
     lexer          = build_lexer()
-    __reservations = {}
+    __reservations = set()
 
     def p_data_environment(p):
         r"""data_environment : reserved_collection object_collection
@@ -205,7 +205,7 @@ def build_parser() -> yacc.LRParser:
 
         def get_blank():
             return {
-                'objects': {},
+                'objects': OrderedDict(),
                 'vars'   : {},
             }
 
@@ -252,7 +252,7 @@ def build_parser() -> yacc.LRParser:
                                | """
         def get_blank():
             return {
-                'objects': {},
+                'objects': OrderedDict(),
                 'fields' : {},
             }
 
@@ -656,7 +656,7 @@ def build(modules, buildername, params=[]):
 
     environment = {
         'reservations': set(),
-        'objects'     : {},
+        'objects'     : OrderedDict(),
     }
 
     for modulename in modules:
