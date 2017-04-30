@@ -36,13 +36,23 @@ class {{ model.fullname|join('__') }}(models.Model):
     {% for field in model.fields.values() if field.id > 0 and field.multiplicity in ('optional', 'required') and field.data_type.type == 'model' %}
 
     @classmethod
-    def new_{{ field.name }}(cls):
+    def get_{{ field.name }}_class(cls):
         return {{ field.data_type.fullname | join('__') }}
+    {% endfor %}
+    {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
+
+    @classmethod
+    def get_{{ field.name }}_class(cls):
+        return __{{ field.model.fullname|join('__') }}___{{ field.name }}
     {% endfor %}
 
 
     {% for _model in model|core.nested_models -%}
 {{ make_model(_model) }}
+    {%- endfor %}
+    {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string -%}
+class __{{ field.model.fullname|join('__') }}___{{ field.name }}(models.Model):
+    value = models.{{ field.data_type|python_django.map_data_type }}()
     {%- endfor %}
 {% endmacro %}
 

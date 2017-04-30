@@ -59,8 +59,8 @@ model User {
     required int              age     = 2 [half = 0.5];
     optional string           address = 3 [default = "nonloso"] [max_length = 50];
     required User.UserProfile profile = 4 [default = User.Pets.DOG];
-    # repeated string           words   = 5;
-    # repeated User.Friend    friends = 6;
+    repeated string           words   = 5;
+    repeated User.Friend    friends = 6;
     # repeated User.Pets        pets    = 7;
 }
 

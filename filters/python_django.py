@@ -75,36 +75,63 @@ def field_declaration(field):
             if isinstance(value, list):
                 value = value[-1]
             args.append('{0}={1}'.format(key, value))
-
-        return ', '.join(args)
+        return args
 
     def make_single_raw_type(field):
         fieldtype = FIELD_MAPPING[datatype]
         args      = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args      = __make_args(**args)
+        args      = ', '.join(__make_args(**args))
         return struct.format(fieldtype=fieldtype, args=args)
+
+    def make_repeated_raw_type(field):
+        args = OrderedDict(field['modifiers'])
+        if field['multiplicity'] == 'required':
+            args['blank'] = False
+        modelname = '{0}___{1}'.format('__'.join(field['model']['fullname']), field['name'])
+        args = ', '.join([modelname] + __make_args(**args))
+        return struct.format(fieldtype='ManyToManyField', args=args)
 
     def make_single_model_type(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args = '{0}, {1}'.format('__'.join(datatype['fullname']), __make_args(**args))
+        args = ', '.join(['__'.join(datatype['fullname'])] + __make_args(**args))
         return struct.format(fieldtype='ForeignKey', args=args)
+
+    def make_repeated_model_type(field):
+        args = OrderedDict(field['modifiers'])
+        if field['multiplicity'] == 'required':
+            args['blank'] = False
+        args = ', '.join(['__'.join(datatype['fullname'])] + __make_args(**args))
+        return struct.format(fieldtype='ManyToManyField', args=args)
 
     if isinstance(datatype, str) and datatype in FIELD_MAPPING:
         if field['multiplicity'] in ('optional', 'required'):
             return make_single_raw_type(field)
+        else:
+            return make_repeated_raw_type(field)
     elif isinstance(datatype, dict) and datatype['type'] == 'model':
         if field['multiplicity'] in ('optional', 'required'):
             return make_single_model_type(field)
-    else:
-        return ''
+        else:
+            return make_repeated_model_type(field)
+    elif isinstance(datatype, dict) and datatype['type'] == 'enum':
+        raise NotImplementedError('Repeated enums are not supported yet')
     raise Exception('Unknown field type: {0} {1} {2}'.format(
         field['multiplicity'], type(datatype).__name__, field['name']))
 
 
+def map_data_type(datatype):
+    if not isinstance(datatype, str):
+        raise TypeError('Datatype must be a string, got: {0}'.format(type(datatype).__name__))
+    if datatype not in FIELD_MAPPING:
+        raise Exception('Unknown data type: {0}'.format(datatype))
+    return FIELD_MAPPING[datatype]
+
+
 FILTERS = {
     'python_django.field_declaration': field_declaration,
+    'python_django.map_data_type'    : map_data_type,
 }
