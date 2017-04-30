@@ -40,6 +40,7 @@ MODIFIERS      = (
     'choices',
     'primary_key',
     'unique',
+    'builtin',
     BUILDER_PREFIX + 'null',
     BUILDER_PREFIX + 'blank',
     BUILDER_PREFIX + 'choices',
@@ -57,6 +58,7 @@ MODIFIERS      = (
     BUILDER_PREFIX + 'unique_for_year',
     BUILDER_PREFIX + 'verbose_name',
     BUILDER_PREFIX + 'validators',
+    BUILDER_PREFIX + 'builtin',
 )
 
 

@@ -38,7 +38,7 @@ __author__ = 'Simone Pandolfi <simopandolfi@gmail.com>'
 #     #optional Message_1 msg = 72;
 # }
 
-model User {
+model Person [python_django__builtin = false] {
 
     enum Pets {
         DOG     = "dog",
@@ -46,7 +46,7 @@ model User {
         HAMSTER = "ham"
     }
 
-    model UserProfile {
+    model PersonProfile {
         optional string role = 21 [default = ''];
     }
 
@@ -55,13 +55,22 @@ model User {
         optional date   since = 32;
     }
 
-    required string           name    = 1 [python_django__unique];
-    required int              age     = 2 [half = 0.5];
-    optional string           address = 3 [default = "nonloso"] [max_length = 50];
-    required User.UserProfile profile = 4 [default = User.Pets.DOG];
-    repeated string           words   = 5;
-    repeated User.Friend    friends = 6;
-    # repeated User.Pets        pets    = 7;
+    required string               name    = 1 [python_django__unique];
+    required int                  age     = 2 [half = 0.5];
+    optional string               address = 3 [default = "nonloso"] [max_length = 50];
+    required Person.PersonProfile profile = 4 [default = User.Pets.DOG];
+    repeated string               words   = 5;
+    repeated Person.Friend        friends = 6;
+    # repeated Person.Pets          pets    = 7;
+}
+
+model User [builtin] {
+    # used for mapping between custom objects and builtin objects
+}
+
+model UserProfile {
+    required User user = 101;
+    optional int  age  = 102 [null = false];
 }
 
 # message Message_1 {

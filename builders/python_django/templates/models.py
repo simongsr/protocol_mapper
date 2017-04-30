@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 
 __author__  = 'ProtocolMapper by Simone Pandolfi'
@@ -24,6 +25,8 @@ __version__ = {{ version }}
 
 
 {%- macro make_model(model) %}
+{% if 'python_django__builtin' not in model.modifiers or model.modifiers.python_django__builtin == False or 'builtin' not in model.modifiers or model.modifiers.builtin == False %}
+
 class {{ model.fullname|join('__') }}(models.Model):
     {% for obj in model.objects.values() if obj.type == 'enum' %}
 
@@ -46,17 +49,17 @@ class {{ model.fullname|join('__') }}(models.Model):
         return __{{ field.model.fullname|join('__') }}___{{ field.name }}
     {% endfor %}
 
-
     {% for _model in model|core.nested_models -%}
 {{ make_model(_model) }}
     {%- endfor %}
     {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string -%}
 class __{{ field.model.fullname|join('__') }}___{{ field.name }}(models.Model):
     value = models.{{ field.data_type|python_django.map_data_type }}()
-    {%- endfor %}
+    {% endfor %}
+{% endif %}
 {% endmacro %}
 
 
 {% for model in models %}
 {{ make_model(model) }}
-{% endfor %}
+{% endfor -%}
