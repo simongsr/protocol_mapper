@@ -78,11 +78,17 @@ model UserProfile {
 }
 
 
-message UserInfo {
+message UserInfoMessage {
     required string name        = 1001;
     required string surname     = 1002;
     optional int    age         = 102;
     optional string description;
+}
+
+message PersonMessage {
+    required string name  = 1;
+    required int    age   = 2;
+    repeated string words = 5;
 }
 
 # message Message_1 {

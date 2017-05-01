@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth.models import User
 from django.db import models
 
@@ -64,38 +66,72 @@ class __{{ field.model.fullname|join('__') }}___{{ field.name }}(models.Model):
         return '__{{ field.model.fullname|join("__") }}___{{ field.name }}: {0}'.format(self.id)
     {% endfor %}
 {% endif %}
-{% endmacro %}
+{% endmacro -%}
 
 
-{% macro make_message(message) %}
+{%- macro make_message(message) %}
 class {{ message.fullname|join('__') }}:
     def __init__(self):
         {% for field in message.fields.values() %}
-        self.__{{ field.name }} = None
+            {% set value = None %}
+            {% if field.multiplicity == 'repeated' %}
+                {% set value = [] %}
+            {% endif %}
+            {% set default_value = None %}
+            {% if field.multiplicity == 'repeated' %}
+                {% set initial_value = [] %}
+            {% elif field.multiplicity == 'optional' %}
+                {% if 'default' in field.modifiers %}
+                    {% set default_value = field.modifiers['default'] %}
+                {% else %}
+                    {% set default_value = (field.data_type | core.map_default_value)() %}
+                {% endif %}
+            {% endif %}
+            {% set required = False %}
+            {% if field.multiplicity == 'required' %}
+                {% set required = True %}
+            {% endif %}
+        self.__{{ field.name }} = {'initialized': False, 'value': {{ value }}, 'default_value': {{ default_value }}, 'required': {{ required }}}
         {% endfor %}
 
-    {% for field in message.fields.values() %}
+    {% for field in message.fields.values() if field.multiplicity != 'repeated' %}
     @property
     def {{field.name}}(self):
-        return self.__{{ field.name }}
+        if not self.__{{ field.name }}['required'] and not self.__{{ field.name }}['initialized']:
+            return self.__{{ field.name }}['default_value']
+        return self.__{{ field.name }}['value']
 
     @{{ field.name }}.setter
     def {{ field.name }}(self, value):
         if not isinstance(value, {{ field.data_type|python.map_data_type }}):
             raise TypeError("Expected '{{ field.name }}' is a {{ field.data_type|python.map_data_type }}, got: {0}".format(type(value).__name__))
-        self.__{{ field.name }} = value
+        self.__{{ field.name }}['value'] = value
+        self.__{{ field.name }}['initialized'] = True
 
     {% endfor %}
     {% for modelname, fieldlist in (message|core.map_message_field_to_model).items() %}
     def load_model_{{ modelname|replace('.', '__') }}(self, model):
         if not isinstance(model, {{ modelname|replace('.', '__') }}):
             raise TypeError("Model must be an instance of {{ modelname|replace('.', '__') }}, got: {0}".format(type(model).__name__))
-
         {% for field in fieldlist %}
+            {% if field.multiplicity != 'repeated' %}
         self.{{ field.name }} = model.{{ field.model_field.name }}
+            {% else %}
+        self.{{ field.name }} = [item for item in model.{{ field.model_field.name }}.all()]
+            {% endif %}
         {% endfor %}
 
     {% endfor %}
+    def serialize(self):
+        {% for field in message.fields.values() if field.multiplicity == 'required' %}
+        if not self.__{{ field.name }}['initialized']:
+            raise Exception("Could not serialize '{{ message.fullname|join('.') }}', '{{ field.name }}' has not been initialized!")
+        {% endfor %}
+        return json.dumps({
+            {% for field in message.fields.values() %}
+            '{{ field.name }}': self.{{ field.name }},
+            {% endfor %}
+        })
 {% endmacro %}
 
 

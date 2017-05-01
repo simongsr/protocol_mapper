@@ -1,6 +1,8 @@
 #!/usr/bin/env python3.5
 from collections import OrderedDict
 
+from main import DATA_TYPES
+
 __author__  = 'Simone Pandolfi'
 __email__   = '<simopandolfi@gmail.com>'
 __version__ = (0, 0, 1)
@@ -75,6 +77,12 @@ def map_message_field_to_model(message):
     return models
 
 
+def map_default_value(datatype):
+    if not isinstance(datatype, str) or datatype not in DATA_TYPES:
+        raise TypeError("Expected datatype was a row type, got: {0} ({1})".format(datatype, type(datatype).__name__))
+    return DATA_TYPES[datatype]
+
+
 FILTERS = {
     'core.enums'                     : enums,
     'core.root_models'               : root_models,
@@ -84,4 +92,5 @@ FILTERS = {
     'core.nested_messages'           : nested_messages,
     'core.messages'                  : messages,
     'core.map_message_field_to_model': map_message_field_to_model,
+    'core.map_default_value'         : map_default_value,
 }

@@ -37,7 +37,7 @@ DATA_TYPES = {
     'timestamp': lambda: datetime.now(),
     'time'     : lambda: 0,
     'bool'     : lambda: False,
-    'string'   : lambda: '',
+    'string'   : lambda: '""',
     'bytes'    : lambda: b'',
 }
 
@@ -634,6 +634,7 @@ def build(modules, buildername, params=[]):
                             '.'.join(message['fullname']), field['name'], _id,
                             '.'.join(model_field['model']['fullname']), model_field['name'], _id))
 
+                    # makes a connection between the message field and the mapped model field
                     field['model_field'] = model_field
 
                 elif not isinstance(field['data_type'], str):
