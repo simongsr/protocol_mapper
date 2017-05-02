@@ -86,9 +86,16 @@ message UserInfoMessage {
 }
 
 message PersonMessage {
-    required string name  = 1;
-    required int    age   = 2;
-    repeated string words = 5;
+
+    message Aphorism {
+        required string aphorism;
+    }
+
+    required string                 name     = 1;
+    required int                    age      = 2;
+    repeated string                 words    = 5;
+    optional PersonMessage.Aphorism aphorism;
+    repeated PersonMessage.Aphorism cits;
 }
 
 # message Message_1 {
