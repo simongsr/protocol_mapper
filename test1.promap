@@ -40,63 +40,63 @@ __author__ = 'Simone Pandolfi <simopandolfi@gmail.com>'
 
 model Person [python_django__builtin = false] {
 
-    enum Pets {
-        DOG     = "dog",
-        CAT     = "cat",
-        HAMSTER = "ham"
-    }
+    # enum Pets {
+    #     DOG     = "dog",
+    #     CAT     = "cat",
+    #     HAMSTER = "ham"
+    # }
+    #
+    # model PersonProfile {
+    #     optional string role = 21 [default = ''][max_length = 50];
+    # }
+    #
+    # model Friend {
+    #     required string name  = 31 [max_length = 50];
+    #     optional date   since = 32;
+    # }
 
-    model PersonProfile {
-        optional string role = 21 [default = ''];
-    }
-
-    model Friend {
-        required string name  = 31;
-        optional date   since = 32;
-    }
-
-    required string               name    = 1 [python_django__unique];
-    required int                  age     = 2 [half = 0.5];
-    optional string               address = 3 [default = "nonloso"] [max_length = 50];
-    required Person.PersonProfile profile = 4 [default = User.Pets.DOG];
-    repeated string               words   = 5;
-    repeated Person.Friend        friends = 6;
+    # required string               name    = 1 [python_django__unique][max_length = 50];
+    # required int                  age     = 2;  # [half = 0.5];
+    # optional string               address = 3 [default = "nonloso"][max_length = 50];
+    # required Person.PersonProfile profile = 4 [default = User.Pets.DOG];
+    repeated string               words   = 5 [max_length = 50];
+    # repeated Person.Friend        friends = 6;
     # repeated Person.Pets          pets    = 7;
 }
 
-model User [builtin] {
-    # used for mapping between custom objects and builtin objects
-    required string first_name = 1001;
-    required string last_name  = 1002;
-    required string email      = 1003;
-    required string username   = 1004;
-}
-
-model UserProfile {
-    required User user = 101;
-    optional int  age  = 102 [null = false];
-}
-
-
-message UserInfoMessage {
-    required string name        = 1001;
-    required string surname     = 1002;
-    optional int    age         = 102;
-    optional string description;
-}
-
-message PersonMessage {
-
-    message Aphorism {
-        required string aphorism;
-    }
-
-    required string                 name     = 1;
-    required int                    age      = 2;
-    repeated string                 words    = 5;
-    optional PersonMessage.Aphorism aphorism;
-    repeated PersonMessage.Aphorism cits;
-}
+# model User [builtin] {
+#     # used for mapping between custom objects and builtin objects
+#     required string first_name = 1001;
+#     required string last_name  = 1002;
+#     required string email      = 1003;
+#     required string username   = 1004;
+# }
+#
+# model UserProfile {
+#     required User user = 101;
+#     optional int  age  = 102 [null = false];
+# }
+#
+#
+# message UserInfoMessage {
+#     required string name        = 1001;
+#     required string surname     = 1002;
+#     optional int    age         = 102;
+#     optional string description;
+# }
+#
+# message PersonMessage {
+#
+#     message Aphorism {
+#         required string aphorism;
+#     }
+#
+#     required string                 name     = 1;
+#     required int                    age      = 2;
+#     repeated string                 words    = 5;
+#     optional PersonMessage.Aphorism aphorism;
+#     repeated PersonMessage.Aphorism cits;
+# }
 
 # message Message_1 {
 #     required string name;

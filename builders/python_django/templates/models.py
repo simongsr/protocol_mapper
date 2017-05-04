@@ -27,8 +27,21 @@ __version__ = {{ version }}
 
 
 {%- macro make_model(model) %}
+{% for _model in model|core.nested_models %}
+
+{{ make_model(_model) }}
+{%- endfor %}
+{% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
+
+class {{ field.model.fullname|join('') }}{{ field.name }}(models.Model):
+    value = models.{{ field.data_type|python_django.map_data_type }}({{ field.modifiers|python_django.prepare_args|join(', ') }})
+
+    def __str__(self):
+        return '{{ field.model.fullname|join("") }}{{ field.name }}: {0}'.format(self.id)
+
+{% endfor %}
 {% if ('python_django__builtin' not in model.modifiers and 'builtin' not in model.modifiers) or model.modifiers.python_django__builtin == False or model.modifiers.builtin == False %}
-class {{ model.fullname|join('__') }}(models.Model):
+class {{ model.fullname|join('_') }}(models.Model):
     {% for obj in model.objects.values() if obj.type == 'enum' %}
 
     {{ make_enum(obj)|indent }}
@@ -39,37 +52,29 @@ class {{ model.fullname|join('__') }}(models.Model):
     {% endfor %}
 
     def __str__(self):
-        return '{{ model.fullname|join("__") }}: {0}'.format(self.id)
+        return '{{ model.fullname|join("_") }}: {0}'.format(self.id)
 
     {% for field in model.fields.values() if field.id > 0 and field.multiplicity in ('optional', 'required') and field.data_type.type == 'model' %}
     @classmethod
     def get_{{ field.name }}_class(cls):
-        return {{ field.data_type.fullname|join('__') }}
+        return {{ field.data_type.fullname|join('_') }}
     {% endfor %}
     {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
 
     @classmethod
     def get_{{ field.name }}_class(cls):
-        return __{{ field.model.fullname|join('__') }}___{{ field.name }}
-    {% endfor %}
-
-    {% for _model in model|core.nested_models %}
-
-{{ make_model(_model) }}
-    {%- endfor %}
-    {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
-
-class __{{ field.model.fullname|join('__') }}___{{ field.name }}(models.Model):
-    value = models.{{ field.data_type|python_django.map_data_type }}()
-
-    def __str__(self):
-        return '__{{ field.model.fullname|join("__") }}___{{ field.name }}: {0}'.format(self.id)
+        return {{ field.model.fullname|join('') }}{{ field.name }}
     {% endfor %}
 {% endif %}
+
 {% endmacro -%}
 
 
 {%- macro make_message(message) %}
+{% for _message in message | core.nested_messages %}
+{{ make_message(_message) }}
+
+{%- endfor %}
 class {{ message.fullname|join('__') }}:
     def __init__(self):
         {% for field in message.fields.values() %}
@@ -187,10 +192,6 @@ class {{ message.fullname|join('__') }}:
             {% endif %}
         {% endfor %}
 
-        {% for _message in message|core.nested_messages %}
-
-{{ make_message(_message) }}
-        {%- endfor %}
 {% endmacro %}
 
 

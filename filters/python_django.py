@@ -62,6 +62,19 @@ MODIFIERS      = (
 )
 
 
+def prepare_args(modifiers):
+    if not isinstance(modifiers, dict):
+        raise TypeError('Expected modifiers was a dict, got: {0}'.format(type(modifiers).__name__))
+    args = []
+    for key, value in modifiers.items():
+        if key.startswith(BUILDER_PREFIX):
+            key = key[len(BUILDER_PREFIX):]
+        if isinstance(value, list):
+            value = value[-1]
+        args.append('{0}={1}'.format(key, value))
+    return args
+
+
 def field_declaration(field):
     if not isinstance(field, dict) or field['type'] != 'field':
         raise TypeError('Expected a field object, got: [{0}] {1}'.format(type(field).__name__, field))
@@ -69,44 +82,33 @@ def field_declaration(field):
     struct   = 'models.{fieldtype}({args})'
     datatype = field['data_type']
 
-    def __make_args(**kwargs):
-        args = []
-        for key, value in kwargs.items():
-            if key.startswith(BUILDER_PREFIX):
-                key = key[len(BUILDER_PREFIX):]
-            if isinstance(value, list):
-                value = value[-1]
-            args.append('{0}={1}'.format(key, value))
-        return args
-
     def make_single_raw_type(field):
         fieldtype = FIELD_MAPPING[datatype]
         args      = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args      = ', '.join(__make_args(**args))
+        args      = ', '.join(prepare_args(args))
         return struct.format(fieldtype=fieldtype, args=args)
 
     def make_repeated_raw_type(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        modelname = '{0}___{1}'.format('__'.join(field['model']['fullname']), field['name'])
-        args = ', '.join([modelname] + __make_args(**args))
-        return struct.format(fieldtype='ManyToManyField', args=args)
+        modelname = '{0}{1}'.format(''.join(field['model']['fullname']), field['name'])
+        return struct.format(fieldtype='ManyToManyField', args=modelname)
 
     def make_single_model_type(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args = ', '.join(['__'.join(datatype['fullname'])] + __make_args(**args))
+        args = ', '.join(['_'.join(datatype['fullname'])] + prepare_args(args))
         return struct.format(fieldtype='ForeignKey', args=args)
 
     def make_repeated_model_type(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args = ', '.join(['__'.join(datatype['fullname'])] + __make_args(**args))
+        args = ', '.join(['_'.join(datatype['fullname'])] + prepare_args(args))
         return struct.format(fieldtype='ManyToManyField', args=args)
 
     if isinstance(datatype, str) and datatype in FIELD_MAPPING:
@@ -134,6 +136,7 @@ def map_data_type(datatype):
 
 
 FILTERS = {
+    'python_django.prepare_args'     : prepare_args,
     'python_django.field_declaration': field_declaration,
     'python_django.map_data_type'    : map_data_type,
 }

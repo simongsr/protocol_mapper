@@ -3,7 +3,7 @@
     {
       "builder": "python_django",
       "params": {
-        "outdir": "/home/simone/PycharmProjects/out_test_protocol_mapper"
+        "outdir": "/home/simone/PycharmProjects/test_django/test_django/account/"
       },
       "enabled": true,
       "modules": ["test1.promap"]
