@@ -71,7 +71,7 @@ class {{ model.fullname|join('_') }}(models.Model):
 
 
 {%- macro make_message(message) %}
-{% for _message in message | core.nested_messages %}
+{% for _message in message|core.nested_messages %}
 {{ make_message(_message) }}
 
 {%- endfor %}

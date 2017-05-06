@@ -66,18 +66,18 @@ model Person [python_django__builtin = false] {
     # repeated Person.Pets          pets    = 7;
 }
 
-model User [python_django__builtin] {
-    # used for mapping between custom objects and builtin objects
-    required string first_name = 1001;
-    required string last_name  = 1002;
-    required string email      = 1003;
-    required string username   = 1004;
-}
+# model User [python_django__builtin] {
+#     # used for mapping between custom objects and builtin objects
+#     required string first_name = 1001;
+#     required string last_name  = 1002;
+#     required string email      = 1003;
+#     required string username   = 1004;
+# }
 
-model UserProfile {
-    required USER user = 101;
-    optional int  age  = 102 [null = false];
-}
+# model UserProfile {
+#     required USER user = 101;
+#     optional int  age  = 102 [null = false];
+# }
 
 
 # message UserInfoMessage {

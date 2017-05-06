@@ -653,6 +653,10 @@ def build(modules, buildername, params=[]):
 
                     model_field = __fields.get(_id, None)  # mapped model field
 
+                    data_type = field['data_type']
+                    if isinstance(data_type, list) and len(data_type) == 1 and data_type[0] in environment['aliases']:
+                        field['data_type'] = environment['aliases'][data_type[0]]
+
                     if field['data_type'] != model_field['data_type']:
                         raise Exception('Mapping types mismatched: {0}.{1} = {2} -> {3}.{4} = {5}'.format(
                             '.'.join(message['fullname']), field['name'], _id,
