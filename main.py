@@ -49,6 +49,7 @@ reserved = {
     'required': 'REQUIRED',
     'optional': 'OPTIONAL',
     'repeated': 'REPEATED',
+    'alias'   : 'ALIAS',
     # 'true'    : 'TRUE',
     # 'false'   : 'FALSE',
 }
@@ -194,10 +195,12 @@ def build_parser() -> yacc.LRParser:
         p[0] = env
 
     def p_object_collection(p):
-        r"""object_collection : object_collection enum
+        r"""object_collection : object_collection alias
+                              | object_collection enum
                               | object_collection model
                               | object_collection message
                               | object_collection name_assignment
+                              | alias
                               | enum
                               | model
                               | message
@@ -207,14 +210,23 @@ def build_parser() -> yacc.LRParser:
             return {
                 'objects': OrderedDict(),
                 'vars'   : {},
+                'aliases': {},
             }
 
         def insert(collection, item):
-            name                = item['name'] if isinstance(item, dict) else item[0]
+            # looks for an already assigned name
+            name = item['name'] if isinstance(item, dict) else item[0]
             if name in reduce(lambda x, y: set(x).union(set(y)), (v.keys() for k, v in collection.items())):
                 raise Exception('[object collection] Duplicated object name: {0}'.format(item['name']))
-            subcollection       = collection['objects' if isinstance(item, dict) else 'vars']
-            subcollection[name] = item if isinstance(item, dict) else item[1]
+            if isinstance(item, dict):
+                # item is an alias | enum | model | message
+                if item['type'] == 'alias':
+                    collection['aliases'][name] = item['value']
+                else:
+                    collection['objects'][name] = item
+            else:
+                # item is a 'name assignment'
+                collection['vars'][name] = item[1]
             return collection
 
         if len(p) == 3:
@@ -442,6 +454,14 @@ def build_parser() -> yacc.LRParser:
 
         p[0] = add(p[1], p[3]) if len(p) == 4 else add(OrderedDict(), p[1])
 
+    def p_alias(p):
+        r"""alias : ALIAS NAME nested_value"""
+        p[0] = {
+            'type' : 'alias',
+            'name' : p[2],
+            'value': p[3]
+        }
+
     def p_reserved_collection(p):
         r"""reserved_collection : reserved_collection RESERVED LINTERVAL id COMMA id RINTERVAL SEMICOLUMN
                                 | reserved_collection RESERVED id_collection SEMICOLUMN
@@ -560,6 +580,10 @@ def build(modules, buildername, params=[]):
                             '.'.join(model['fullname']), field['name'], _id))
                     __fields[_id]  = field
 
+                    data_type = field['data_type']
+                    if isinstance(data_type, list) and len(data_type) == 1 and data_type[0] in environment['aliases']:
+                        field['data_type'] = environment['aliases'][data_type[0]]
+
                     field['model'] = model  # creates a backward reference (from field to its parent model)
 
                     if not isinstance(field['data_type'], str):
@@ -660,6 +684,7 @@ def build(modules, buildername, params=[]):
     environment = {
         'reservations': set(),
         'objects'     : OrderedDict(),
+        'aliases'     : {},
     }
 
     for modulename in modules:
@@ -670,6 +695,13 @@ def build(modules, buildername, params=[]):
         if any(intersection):
             raise Exception('[reservation] Duplicated IDs: {0}'.format(', '.join(str(_id) for _id in intersection)))
         environment['reservations'].update(module['reservations'])
+
+        # merges aliases
+        _module = module['module']
+        intersection = set(_module['aliases'].keys()).intersection(environment['aliases'].keys())
+        if any(intersection):
+            raise Exception('[alias] Duplicated aliases: {0}'.format(', '.join(name for name in intersection)))
+        environment['aliases'].update(_module['aliases'])
 
         # merges the modules
         intersection = set(module['module']['objects'].keys()).intersection(set(environment['objects'].keys()))

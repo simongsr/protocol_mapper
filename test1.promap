@@ -4,6 +4,8 @@
 # reserved [90 , 99];
 # reserved [91, 93];
 
+alias USER User
+
 VARIABILE_GLOBALE_1 = 'global var'
 
 __author__ = 'Simone Pandolfi <simopandolfi@gmail.com>'
@@ -35,7 +37,7 @@ __author__ = 'Simone Pandolfi <simopandolfi@gmail.com>'
 #
 #
 #     required ModelloProva.NestedModel test = 8;
-#     #optional Message_1 msg = 72;
+#     #optional Message_1 msg = 72;  # NOT PERMITTED - message reference into model declaration
 # }
 
 model Person [python_django__builtin = false] {
@@ -64,27 +66,27 @@ model Person [python_django__builtin = false] {
     # repeated Person.Pets          pets    = 7;
 }
 
-# model User [builtin] {
-#     # used for mapping between custom objects and builtin objects
-#     required string first_name = 1001;
-#     required string last_name  = 1002;
-#     required string email      = 1003;
-#     required string username   = 1004;
-# }
-#
-# model UserProfile {
-#     required User user = 101;
-#     optional int  age  = 102 [null = false];
-# }
-#
-#
+model User [python_django__builtin] {
+    # used for mapping between custom objects and builtin objects
+    required string first_name = 1001;
+    required string last_name  = 1002;
+    required string email      = 1003;
+    required string username   = 1004;
+}
+
+model UserProfile {
+    required USER user = 101;
+    optional int  age  = 102 [null = false];
+}
+
+
 # message UserInfoMessage {
 #     required string name        = 1001;
 #     required string surname     = 1002;
 #     optional int    age         = 102;
 #     optional string description;
 # }
-#
+
 # message PersonMessage {
 #
 #     message Aphorism {
