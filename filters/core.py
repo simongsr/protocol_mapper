@@ -8,6 +8,21 @@ __email__   = '<simopandolfi@gmail.com>'
 __version__ = (0, 0, 1)
 
 
+def upper_camel_case(name, joinstr='_'):
+    if not isinstance(name, (str, list)):
+        raise TypeError("Name must be a string or a list, got: {0} ({1})".format(name, type(name).__name__))
+    if isinstance(name, list):
+        return joinstr.title().join(n.title().replace('_', '') for n in name)
+    return name.title().replace('_', '')
+
+
+def lower_camel_case(name, joistr='_'):
+    if len(name) > 0:
+        name = upper_camel_case(name, joistr=joistr)
+        return name[0].lower() + name[1:]
+    return ''
+
+
 def enums(obj):
     if not isinstance(obj, dict) or 'objects' not in obj:
         raise Exception("Expected 'env' was a valid environment, model or message instance")
@@ -36,8 +51,8 @@ def models(env):
         raise Exception("Expected 'env' was a valid environment instance")
 
     for root_model in root_models(env):
-        yield root_model
         yield from nested_models(root_model)
+        yield root_model
 
 
 def root_messages(env):
@@ -61,8 +76,8 @@ def messages(env):
         raise Exception("Expected 'env' was a valid environment instance")
 
     for root_message in root_messages(env):
-        yield root_message
         yield from nested_messages(root_message)
+        yield root_message
 
 
 def map_message_field_to_model(message):
@@ -72,7 +87,7 @@ def map_message_field_to_model(message):
     models = OrderedDict()
     for field in message['fields'].values():
         if field['id'] is not None:
-            key = '.'.join(field['model_field']['model']['fullname'])
+            key = '.'.join(field['model_field']['parent']['fullname'])
             models.setdefault(key, []).append(field)
     return models
 
@@ -84,6 +99,8 @@ def map_default_value(datatype):
 
 
 FILTERS = {
+    'core.upper_camel_case'          : upper_camel_case,
+    'core.lower_camel_case'          : lower_camel_case,
     'core.enums'                     : enums,
     'core.root_models'               : root_models,
     'core.nested_models'             : nested_models,

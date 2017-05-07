@@ -570,6 +570,9 @@ def build(modules, buildername, params=[]):
             model['parent'] = parent_model
 
             for field in model['fields'].values():
+
+                field['parent'] = model  # creates a backward reference (from field to its parent model)
+
                 _id = field['id']
                 if _id > 0:
                     if _id in reservations:
@@ -583,8 +586,6 @@ def build(modules, buildername, params=[]):
                     data_type = field['data_type']
                     if isinstance(data_type, list) and len(data_type) == 1 and data_type[0] in environment['aliases']:
                         field['data_type'] = environment['aliases'][data_type[0]]
-
-                    field['model'] = model  # creates a backward reference (from field to its parent model)
 
                     if not isinstance(field['data_type'], str):
                         referenced_object = get_model(objects, field['data_type'])
@@ -638,6 +639,9 @@ def build(modules, buildername, params=[]):
             message['parent'] = parent_message
 
             for field in message['fields'].values():
+
+                field['parent'] = message
+
                 _id = field['id']
                 if _id is not None:
                     if _id in reservations:

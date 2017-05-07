@@ -1,6 +1,8 @@
 #!/usr/bin/env python3.5
 from collections import OrderedDict
 
+from filters import core
+
 __author__  = 'Simone Pandolfi'
 __email__   = '<simopandolfi@gmail.com>'
 __version__ = (0, 0, 1)
@@ -62,6 +64,18 @@ MODIFIERS      = (
 )
 
 
+JOIN_STR = 'Nstd'
+
+
+def class_name(obj):
+    if not isinstance(obj, dict):
+        raise TypeError("Obj must be an instance of a model, a message or a field, got: {0}".format(obj))
+
+    if obj['type'] == 'field':
+        return JOIN_STR.join((class_name(obj['parent']), core.upper_camel_case(obj['name'])))
+    return core.upper_camel_case(obj['fullname'], joinstr=JOIN_STR)
+
+
 def prepare_args(modifiers):
     if not isinstance(modifiers, dict):
         raise TypeError('Expected modifiers was a dict, got: {0}'.format(type(modifiers).__name__))
@@ -94,21 +108,21 @@ def field_declaration(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        modelname = '{0}{1}'.format(''.join(field['model']['fullname']), field['name'])
+        modelname = class_name(field)  # '{0}{1}'.format(''.join(field['parent']['fullname']), field['name'])
         return struct.format(fieldtype='ManyToManyField', args=modelname)
 
     def make_single_model_type(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args = ', '.join(['_'.join(datatype['fullname'])] + prepare_args(args))
+        args = ', '.join([class_name(datatype)] + prepare_args(args))
         return struct.format(fieldtype='ForeignKey', args=args)
 
     def make_repeated_model_type(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args = ', '.join(['_'.join(datatype['fullname'])] + prepare_args(args))
+        args = ', '.join([class_name(datatype)] + prepare_args(args))
         return struct.format(fieldtype='ManyToManyField', args=args)
 
     if isinstance(datatype, str) and datatype in FIELD_MAPPING:
@@ -136,6 +150,7 @@ def map_data_type(datatype):
 
 
 FILTERS = {
+    'python_django.class_name'       : class_name,
     'python_django.prepare_args'     : prepare_args,
     'python_django.field_declaration': field_declaration,
     'python_django.map_data_type'    : map_data_type,

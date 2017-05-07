@@ -30,8 +30,8 @@ FIELD_MAPPING  = {
 
 
 def map_data_type(datatype):
-    if isinstance(datatype, dict):
-        return '__'.join(datatype['fullname'])
+    if not isinstance(datatype, str):
+        raise TypeError("Datatype must be a string, got: {0}".format(type(datatype).__name__))
     if datatype not in FIELD_MAPPING:
         raise Exception('Unknown data type: {0}'.format(datatype))
     return FIELD_MAPPING[datatype]

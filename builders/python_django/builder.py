@@ -39,9 +39,9 @@ def __create_outdir_if_not_exists(outdir=os.path.dirname(__file__)):
 def __build_models(env, outdir=None):
     template = __ENVIRONMENT.get_template('models.py')
     context  = {
-        'models'  : [obj for obj in core.root_models(env)],
-        'messages': [obj for obj in core.root_messages(env)],
-        # TODO inserire anche i root enums
+        'enums'   : (obj for obj in core.enums(env)),
+        'models'  : (obj for obj in core.root_models(env)),
+        'messages': (obj for obj in core.root_messages(env)),
     }
     source   = template.render(context)
     print(source)
