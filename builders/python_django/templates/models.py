@@ -214,23 +214,26 @@ class {{ message|python_django.class_name }}:
         })
 
     @classmethod
-    def load(cls, data):
-        obj = json.loads(data)
+    def load(cls, obj, parse=True):
+        if not isinstance(parse, bool):
+            raise TypeError('Parse must be a boolean, got: {0}'.format(type(obj).__name__))
+        if parse:
+            obj = json.loads(obj)
         new_instance = cls()
         {% for field in message.fields.values() %}
             {% if field.data_type is mapping %}
                 {% if field.multiplicity != 'repeated'%}
                     {% if field.data_type is string %}
-        new_instance.{{ field.name }} = {{ field.data_type|python.map_data_type }}.load(obj['{{ field.name }}'])
+        new_instance.{{ field.name }} = {{ field.data_type|python.map_data_type }}.load(obj['{{ field.name }}'], parse=False)
                     {% else %}
-        new_instance.{{field.name}} = {{ field|python_django.class_name }}.load(obj['{{ field.name }}'])
+        new_instance.{{field.name}} = {{ field|python_django.class_name }}.load(obj['{{ field.name }}'], parse=False)
                     {% endif %}
                 {% else %}
                     {% if field.data_type is string %}
-        new_instance.{{field.name}} = [{{ field.data_type|python.map_data_type }}.load(item)
+        new_instance.{{field.name}} = [{{ field.data_type|python.map_data_type }}.load(item, parse=False)
                                        for item in obj['{{ field.name }}']]
                     {% else %}
-        new_instance.{{field.name}} = [{{ field|python_django.class_name }}.load(item)
+        new_instance.{{field.name}} = [{{ field|python_django.class_name }}.load(item, parse=False)
                                        for item in obj['{{ field.name }}']]
                     {% endif %}
                 {% endif %}
