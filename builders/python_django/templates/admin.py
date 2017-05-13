@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from {{ appname }}.models import *
+{% for model in env|core.models if ('python_django__builtin' not in model.modifiers and 'builtin' not in model.modifiers) or model.modifiers.python_django__builtin == False or model.modifiers.builtin == False %}
+    {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
+from {{ appname }}.models import {{ field|python_django.class_name }}
+    {% endfor %}
+from {{ appname }}.models import {{ model|python_django.class_name }}
+{% endfor %}
 
 __author__  = 'ProtocolMapper by Simone Pandolfi'
 __email__   = 'simopandolfi@gmail.com'
