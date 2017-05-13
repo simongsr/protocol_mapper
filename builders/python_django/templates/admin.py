@@ -14,14 +14,14 @@ __version__ = {{ version }}
 
 
 {% for model in env|core.models if ('python_django__builtin' not in model.modifiers and 'builtin' not in model.modifiers) or model.modifiers.python_django__builtin == False or model.modifiers.builtin == False %}
-{% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
+    {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
 class {{ field|python_django.class_name }}Admin(admin.ModelAdmin):
     pass
 
 admin.site.register({{ field|python_django.class_name }}, {{ field|python_django.class_name }}Admin)
 
 
-{% endfor %}
+    {% endfor %}
 class {{ model|python_django.class_name }}Admin(admin.ModelAdmin):
     pass
 
