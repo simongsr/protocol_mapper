@@ -1,6 +1,5 @@
 #!/usr/bin/env python3.5
 import os
-from pprint import PrettyPrinter
 
 import jinja2
 
@@ -22,28 +21,36 @@ __ENVIRONMENT.filters.update(python_django.FILTERS)
 
 
 def build(environment, **kwargs):
-    # print(10 * '-' + ' python_django ' + 10 * '-')
-    # pp = PrettyPrinter(indent=True)
-    # pp.pprint(environment)
-    # pp.pprint(kwargs)
-
     __create_outdir_if_not_exists(**kwargs)
     __build_models(environment, **kwargs)
+    __build_admin(environment, **kwargs)
 
 
-def __create_outdir_if_not_exists(outdir=os.path.dirname(__file__)):
+def __create_outdir_if_not_exists(outdir=os.path.dirname(__file__), **kwargs):
     if not os.path.exists(outdir):
         os.mkdir(outdir)
 
 
-def __build_models(env, outdir=None):
-    template = __ENVIRONMENT.get_template('models.py')
-    context  = {
+def __build_models(env, outdir=None, **kwargs):
+    output_filename = 'models.py'
+    template        = __ENVIRONMENT.get_template(output_filename)
+    context         = {
         'enums'   : (obj for obj in core.enums(env)),
         'models'  : (obj for obj in core.root_models(env)),
         'messages': (obj for obj in core.root_messages(env)),
     }
-    source   = template.render(context)
-    print(source)
-    with open(os.path.join(outdir, 'models.py'), 'w') as fp:
+    source          = template.render(context)
+    with open(os.path.join(outdir, output_filename), 'w') as fp:
+        fp.write(source)
+
+
+def __build_admin(env, outdir=None, appname="", **kwargs):
+    output_filename = 'admin.py'
+    template        = __ENVIRONMENT.get_template(output_filename)
+    context         = {
+        'env'    : env,
+        'appname': appname,
+    }
+    source          = template.render(context)
+    with open(os.path.join(outdir, output_filename), 'w') as fp:
         fp.write(source)

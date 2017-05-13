@@ -60,7 +60,7 @@ model Person [python_django__builtin = false] {
     required string                name    = 1 [python_django__unique][max_length = 50];
     required int                   age     = 2;  # [half = 0.5];
     optional string                address = 3 [default = "nonloso"][max_length = 50];
-    required Person.Person_Profile profile = 4 [default = User.Pets.DOG];
+    required Person.Person_Profile profile = 4;
     repeated string                words   = 5 [max_length = 50];
     repeated Person.Friend         friends = 6;
     # repeated Person.Pets           pets    = 7;

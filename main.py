@@ -1,6 +1,8 @@
 #!/usr/bin/env python3.5
 import importlib
 import json
+import os
+import sys
 from collections import OrderedDict
 from datetime import date, datetime
 from functools import reduce
@@ -789,21 +791,22 @@ class ConfigStruct:
             build(self.get_modules(buildname), buildname, self.get_params(buildname))
 
 
-if __name__ == '__main__':
-
-    # from pprint import PrettyPrinter
-    # PP = PrettyPrinter(indent=True)
-
-    t1 = datetime.now()
-    #PP.pprint(parse('test1.promap'))
-
-    config = ConfigStruct('test_config.json')
-    # for buildname in config.builds:
-    #     PP.pprint(build)
-    #     env = build(config.get_modules(buildname))
-    #     PP.pprint(env)
+def cli(*args, **kwargs):
+    config_filepath = 'config.json'
+    if any(args):
+        config_filepath = args[0]
+    else:
+        if not os.path.exists(config_filepath):
+            raise Exception('Could not find the default configuration file: {0} not found in current directory'.format(
+                config_filepath))
+    config = ConfigStruct(config_filepath)
     config.build()
 
-    t2 = datetime.now()
 
-    print('\n\n{0}'.format(t2 - t1))
+if __name__ == '__main__':
+    t1 = datetime.now()
+
+    cli(*sys.argv[1:])
+
+    t2 = datetime.now()
+    print('{0}Benchmark: {1}\n'.format('\n' * 5, t2 - t1))

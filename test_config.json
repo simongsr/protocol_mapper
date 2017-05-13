@@ -3,7 +3,8 @@
     {
       "builder": "python_django",
       "params": {
-        "outdir": "/home/simone/PycharmProjects/test_django/test_django/account/"
+        "outdir": "/home/simone/PycharmProjects/test_django/test_django/account/",
+        "appname": "account"
       },
       "enabled": true,
       "modules": ["test1.promap"]
