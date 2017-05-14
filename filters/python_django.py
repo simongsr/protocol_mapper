@@ -42,7 +42,7 @@ MODIFIERS      = (
     'choices',
     'primary_key',
     'unique',
-    'builtin',
+    'max_length',
     BUILDER_PREFIX + 'null',
     BUILDER_PREFIX + 'blank',
     BUILDER_PREFIX + 'choices',
@@ -60,7 +60,7 @@ MODIFIERS      = (
     BUILDER_PREFIX + 'unique_for_year',
     BUILDER_PREFIX + 'verbose_name',
     BUILDER_PREFIX + 'validators',
-    BUILDER_PREFIX + 'builtin',
+    BUILDER_PREFIX + 'max_length',
 )
 
 
@@ -81,11 +81,12 @@ def prepare_args(modifiers):
         raise TypeError('Expected modifiers was a dict, got: {0}'.format(type(modifiers).__name__))
     args = []
     for key, value in modifiers.items():
-        if key.startswith(BUILDER_PREFIX):
-            key = key[len(BUILDER_PREFIX):]
-        if isinstance(value, list):
-            value = value[-1]
-        args.append('{0}={1}'.format(key, value))
+        if key in MODIFIERS:
+            if key.startswith(BUILDER_PREFIX):
+                key = key[len(BUILDER_PREFIX):]
+            if isinstance(value, list):
+                value = value[-1]
+            args.append('{0}={1}'.format(key, value))
     return args
 
 
@@ -116,6 +117,8 @@ def field_declaration(field):
         if field['multiplicity'] == 'required':
             args['blank'] = False
         args = ', '.join([class_name(datatype)] + prepare_args(args))
+        if field['modifiers'].get('python_django__one_to_one', False):
+            return struct.format(fieldtype='OneToOneField', args=args)
         return struct.format(fieldtype='ForeignKey', args=args)
 
     def make_repeated_model_type(field):
