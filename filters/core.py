@@ -8,11 +8,11 @@ __email__   = '<simopandolfi@gmail.com>'
 __version__ = (0, 0, 1)
 
 
-def upper_camel_case(name, joinstr='_'):
+def upper_camel_case(name, splitstr='_'):
     if not isinstance(name, (str, list)):
         raise TypeError("Name must be a string or a list, got: {0} ({1})".format(name, type(name).__name__))
     if isinstance(name, list):
-        return joinstr.title().join(n.title().replace('_', '') for n in name)
+        return splitstr.title().join(n.title().replace('_', '') for n in name)
     return name.title().replace('_', '')
 
 
@@ -46,13 +46,16 @@ def nested_models(model):
         yield from nested_models(_model)
 
 
-def models(env):
+def models(env, reverse=False):
     if not isinstance(env, dict) or 'objects' not in env:
         raise Exception("Expected 'env' was a valid environment instance")
 
     for root_model in root_models(env):
-        yield from nested_models(root_model)
+        if not reverse:
+            yield from nested_models(root_model)
         yield root_model
+        if reverse:
+            yield from nested_models(root_model)
 
 
 def root_messages(env):
@@ -98,6 +101,24 @@ def map_default_value(datatype):
     return DATA_TYPES[datatype]
 
 
+def version(obj):
+
+    def field_version(field):
+        return int(field['modifiers'].get('version', 1))
+
+    def model_version(model):
+        return max(1, *(field_version(field) for field in model['fields'].values()))
+
+    if 'type' in obj:
+        if obj['type'] == 'model':
+            return model_version(obj)
+        elif obj['type'] == 'field':
+            return field_version(obj)
+        else:
+            raise TypeError('Unknown object type: {0}'.format(obj))
+    return max(1, *(model_version(model) for model in models(obj)))
+
+
 FILTERS = {
     'core.upper_camel_case'          : upper_camel_case,
     'core.lower_camel_case'          : lower_camel_case,
@@ -110,4 +131,5 @@ FILTERS = {
     'core.messages'                  : messages,
     'core.map_message_field_to_model': map_message_field_to_model,
     'core.map_default_value'         : map_default_value,
+    'core.version'                   : version,
 }

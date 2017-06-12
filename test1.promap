@@ -75,8 +75,8 @@ model User [python_django__builtin] {
 }
 
 model UserProfile {
-    required USER user = 101 [python_django__one_to_one];
-    optional int  age  = 102 [null = false];
+    required USER user = 101 [python_django__one_to_one][java_android__excempt];
+    optional int  age  = 102 [null = false][version = 3];
 }
 
 

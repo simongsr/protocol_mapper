@@ -28,10 +28,10 @@ def build(environment, **kwargs):
 
 def __create_outdir_if_not_exists(outdir=os.path.dirname(__file__), **kwargs):
     if not os.path.exists(outdir):
-        os.mkdir(outdir)
+        os.makedirs(outdir)
 
 
-def __build_models(env, outdir=None, **kwargs):
+def __build_models(env, outdir, **kwargs):
     output_filename = 'models.py'
     template        = __ENVIRONMENT.get_template(output_filename)
     context         = {
@@ -44,7 +44,7 @@ def __build_models(env, outdir=None, **kwargs):
         fp.write(source)
 
 
-def __build_admin(env, outdir=None, appname="", **kwargs):
+def __build_admin(env, outdir, appname="", **kwargs):
     output_filename = 'admin.py'
     template        = __ENVIRONMENT.get_template(output_filename)
     context         = {

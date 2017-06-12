@@ -73,7 +73,7 @@ def class_name(obj):
 
     if obj['type'] == 'field':
         return JOIN_STR.join((class_name(obj['parent']), core.upper_camel_case(obj['name'])))
-    return core.upper_camel_case(obj['fullname'], joinstr=JOIN_STR)
+    return core.upper_camel_case(obj['fullname'], splitstr=JOIN_STR)
 
 
 def prepare_args(modifiers):

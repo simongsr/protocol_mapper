@@ -116,6 +116,17 @@ def make_model_field(multiplicity, datatype, name, _id, modifiers={}, source_fie
     }
 
 
+def make_model(name, modifiers={}, fields={}, objects={}):
+    return {
+        'type'     : 'model',
+        'name'     : name,
+        'fullname' : [name],
+        'modifiers': modifiers,
+        'fields'   : fields,
+        'objects'  : objects,
+    }
+
+
 def build_lexer() -> lex.Lexer:
 
     t_ASSIGN         = r'='
@@ -321,14 +332,7 @@ def build_parser() -> yacc.LRParser:
                     fullname(name, obj['objects'])
             return objects
 
-        p[0] = {
-            'type'     : 'model',
-            'name'     : p[2],
-            'fullname' : [p[2]],
-            'modifiers': p[3],
-            'fields'   : p[5]['fields'],
-            'objects'  : fullname(p[2], p[5]['objects']),
-        }
+        p[0] = make_model(name=p[2], modifiers=p[3], fields=p[5]['fields'], objects=fullname(p[2], p[5]['objects']))
 
     def p_model_definition(p):
         r"""model_definition : model_definition enum
@@ -730,7 +734,7 @@ def build(modules, buildername, params=[]):
     # makes
     builder = importlib.import_module('builders.{0}'.format(buildername))
     if not hasattr(builder, 'build') or not callable(builder.build):
-        raise NameError("Missing 'make' function in builder: {0}".format(buildername))
+        raise NameError("Missing 'build' function in builder: {0}".format(buildername))
     builder.build(environment, **params)
 
 
@@ -770,6 +774,9 @@ class ConfigStruct:
     def builds(self):
         return (buildname for buildname in self.__builds)
 
+    def get_build(self, buildname):
+        return self.__builds[buildname]
+
     def get_modules(self, buildname):
         if buildname not in self.__builds:
             return []
@@ -788,7 +795,9 @@ class ConfigStruct:
             for buildname in self.builds:
                 self.build(buildname=buildname)
         else:
-            build(self.get_modules(buildname), buildname, self.get_params(buildname))
+            attrs = self.get_build(buildname)
+            if attrs.get('enabled', False) is True:
+                build(self.get_modules(buildname), buildname, self.get_params(buildname))
 
 
 def cli(*args, **kwargs):
