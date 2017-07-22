@@ -113,3 +113,26 @@ message Person_Message {
 # 0.2e-3
 # 0.1E5
 # .7e+2
+
+
+
+# Proposta per l'interfaccia
+
+message Contact {
+    optional int id;
+    required string name;
+}
+
+message Message {
+    required string value;
+}
+
+BASE_URL           = '/api'
+CONTACT_URL        = BASE_URL + '/contact'
+CREATE_CONTACT_URL = CONTACT_URL + '/create'
+GET_CONTACT_URL    = CONTACT_URL + '/get'
+
+create_contact(Contact): int [method = 'POST'] [url = CREATE_CONTACT_URL];
+get_contact(int): Contact [method = 'GET'] [url = GET_CONTACT_URL];
+
+#send_message(Message): void [queue = '/messages'];

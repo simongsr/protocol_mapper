@@ -3,7 +3,7 @@
     {
       "builder": "python_django",
       "params": {
-        "outdir": "/home/simone/PycharmProjects/test/protocol_mapper/python_django/",
+        "outdir": "/Users/simonepandolfi/PycharmProjects/test/protocol_mapper/python_django/",
         "appname": "account"
       },
       "enabled": true,
@@ -16,7 +16,7 @@
         "package": "com.simonepandolfi.test_java_android.data",
         "appname": "test"
       },
-      "enabled": true,
+      "enabled": false,
       "modules": ["test1.promap"]
     }
   ]

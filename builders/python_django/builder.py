@@ -20,10 +20,12 @@ __ENVIRONMENT.filters.update(python.FILTERS)
 __ENVIRONMENT.filters.update(python_django.FILTERS)
 
 
-def build(environment, **kwargs):
+def build(schema, **kwargs):
     __create_outdir_if_not_exists(**kwargs)
-    __build_models(environment, **kwargs)
-    __build_admin(environment, **kwargs)
+    __build_models(schema, **kwargs)
+    __build_admin(schema, **kwargs)
+    __build_urls(schema, **kwargs)
+    __build_views(schema, **kwargs)
 
 
 def __create_outdir_if_not_exists(outdir=os.path.dirname(__file__), **kwargs):
@@ -31,26 +33,53 @@ def __create_outdir_if_not_exists(outdir=os.path.dirname(__file__), **kwargs):
         os.makedirs(outdir)
 
 
-def __build_models(env, outdir, **kwargs):
+def __build_models(schema, outdir, **kwargs):
     output_filename = 'models.py'
     template        = __ENVIRONMENT.get_template(output_filename)
     context         = {
-        'enums'   : (obj for obj in core.enums(env)),
-        'models'  : (obj for obj in core.root_models(env)),
-        'messages': (obj for obj in core.root_messages(env)),
+        'enums'   : (obj for obj in core.enums(schema)),
+        'models'  : (obj for obj in core.root_models(schema)),
+        'messages': (obj for obj in core.root_messages(schema)),
     }
     source          = template.render(context)
     with open(os.path.join(outdir, output_filename), 'w') as fp:
         fp.write(source)
 
 
-def __build_admin(env, outdir, appname="", **kwargs):
+def __build_admin(schema, outdir, appname="", **kwargs):
     output_filename = 'admin.py'
     template        = __ENVIRONMENT.get_template(output_filename)
     context         = {
-        'env'    : env,
+        'env'    : schema,
         'appname': appname,
     }
     source          = template.render(context)
+    with open(os.path.join(outdir, output_filename), 'w') as fp:
+        fp.write(source)
+
+
+def __build_urls(schema, outdir, **kwargs):
+    output_filename = 'urls.py'
+    template        = __ENVIRONMENT.get_template(output_filename)
+    context         = {
+        'urls': {
+            name: core.build_uri(endpoint['modifiers']['url'], schema['vars'])
+                 for name, endpoint in schema['endpoints'].items()
+        },
+    }
+    source          = template.render(context)
+    with open(os.path.join(outdir, output_filename), 'w') as fp:
+        fp.write(source)
+
+
+def __build_views(schema, outdir, **kwargs):
+    output_filename = 'views.py'
+    template = __ENVIRONMENT.get_template(output_filename)
+    context = {
+        'enums': (obj for obj in core.enums(schema)),
+        'models': (obj for obj in core.root_models(schema)),
+        'messages': (obj for obj in core.root_messages(schema)),
+    }
+    source = template.render(context)
     with open(os.path.join(outdir, output_filename), 'w') as fp:
         fp.write(source)

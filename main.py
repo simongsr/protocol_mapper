@@ -41,6 +41,7 @@ DATA_TYPES = {
     'bool'     : lambda: False,
     'string'   : lambda: '""',
     'bytes'    : lambda: b'',
+    'void'     : lambda: None,
 }
 
 reserved = {
@@ -65,6 +66,7 @@ tokens = [
     'FRACT',
     'DOT',
     'COMMA',
+    'COLON',
     'SEMICOLUMN',
     'LPAREN',
     'RPAREN',
@@ -136,6 +138,7 @@ def build_lexer() -> lex.Lexer:
     t_FRACT          = r'/'
     t_DOT            = r'\.'
     t_COMMA          = r','
+    t_COLON          = r':'
     t_SEMICOLUMN     = r';'
     t_LPAREN         = r'\('
     t_RPAREN         = r'\)'
@@ -212,18 +215,21 @@ def build_parser() -> yacc.LRParser:
                               | object_collection enum
                               | object_collection model
                               | object_collection message
+                              | object_collection endpoint
                               | object_collection name_assignment
                               | alias
                               | enum
                               | model
                               | message
+                              | endpoint
                               | name_assignment"""
 
         def get_blank():
             return {
-                'objects': OrderedDict(),
-                'vars'   : {},
-                'aliases': {},
+                'objects'  : OrderedDict(),
+                'vars'     : {},
+                'aliases'  : {},
+                'endpoints': {},
             }
 
         def insert(collection, item):
@@ -235,6 +241,8 @@ def build_parser() -> yacc.LRParser:
                 # item is an alias | enum | model | message
                 if item['type'] == 'alias':
                     collection['aliases'][name] = item['value']
+                elif item['type'] == 'endpoint':
+                    collection['endpoints'][name] = item
                 else:
                     collection['objects'][name] = item
             else:
@@ -247,6 +255,16 @@ def build_parser() -> yacc.LRParser:
         else:
             collection = insert(get_blank(), p[1])
         p[0] = collection
+
+    def p_endpoint(p):
+        r"""endpoint : NAME LPAREN field_type RPAREN COLON field_type modifier_collection SEMICOLUMN"""
+        p[0] = {
+            'type'       : 'endpoint',
+            'name'       : p[1],
+            'input_type' : p[3],
+            'return_type': p[6],
+            'modifiers'  : p[7],
+        }
 
     def p_message(p):
         r"""message : MESSAGE NAME modifier_collection LBRACKET message_definition RBRACKET"""
@@ -406,6 +424,7 @@ def build_parser() -> yacc.LRParser:
                        | BOOL
                        | STRING
                        | BYTES
+                       | VOID
                        | nested_value"""
         p[0] = p[1]
 
@@ -495,12 +514,24 @@ def build_parser() -> yacc.LRParser:
         p[0]           = collection
 
     def p_name_assignment(p):
-        r"""name_assignment : NAME ASSIGN STRING_VALUE
-                            | NAME ASSIGN FLOAT_VALUE
-                            | NAME ASSIGN INTEGER_VALUE
-                            | NAME ASSIGN BOOLEAN_VALUE
-                            | NAME ASSIGN nested_value"""
+        r"""name_assignment : NAME ASSIGN concatenation"""
         p[0] = (p[1], p[3])
+
+    def p_concatenation(p):
+        r"""concatenation : concatenation PLUS STRING_VALUE
+                          | concatenation PLUS FLOAT_VALUE
+                          | concatenation PLUS INTEGER_VALUE
+                          | concatenation PLUS BOOLEAN_VALUE
+                          | concatenation PLUS nested_value
+                          | STRING_VALUE
+                          | FLOAT_VALUE
+                          | INTEGER_VALUE
+                          | BOOLEAN_VALUE
+                          | nested_value"""
+        if len(p) == 4:
+            p[0] = p[1] + [p[3]]
+        else:
+            p[0] = p[1] if isinstance(p[1], (tuple, list)) else [p[1]]
 
     def p_nested_value(p):
         r"""nested_value : nested_value DOT NAME
@@ -699,6 +730,8 @@ def build(modules, buildername, params=[]):
         'reservations': set(),
         'objects'     : OrderedDict(),
         'aliases'     : {},
+        'vars'        : {},
+        'endpoints'   : {},
     }
 
     for modulename in modules:
@@ -718,14 +751,16 @@ def build(modules, buildername, params=[]):
         environment['aliases'].update(_module['aliases'])
 
         # merges the modules
-        intersection = set(module['module']['objects'].keys()).intersection(set(environment['objects'].keys()))
+        intersection = set(_module['objects'].keys()).intersection(set(environment['objects'].keys()))
         if any(intersection):
             raise Exception("Duplicated objects names: {0}".format(', '.join(intersection)))
 
-        for obj in module['module']['objects'].values():
-            obj['vars'] = module['module']['vars']  # inserts module's variables into the object
+        # for obj in module['module']['objects'].values():
+        #     obj['vars'] = module['module']['vars']  # inserts module's variables into the object
+        environment['vars'].update(_module['vars'])
 
-        environment['objects'].update(module['module']['objects'])
+        environment['objects'].update(_module['objects'])
+        environment['endpoints'].update(_module['endpoints'])
 
     # builds models and messages graphs
     build_model_graph(environment)

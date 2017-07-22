@@ -119,6 +119,29 @@ def version(obj):
     return max(1, *(model_version(model) for model in models(obj)))
 
 
+def build_uri(collection, vars):
+    if not isinstance(collection, (tuple, list)):
+        raise TypeError("Expected collection was a collection, got: {0} ({1})".format(collection, type(collection).__name__))
+    if not isinstance(vars, dict):
+        raise TypeError("Expected vars was a map, got: {0} ({1})".format(vars, type(vars).__name__))
+
+    def scan(lst):
+        ret = []
+        for item in lst:
+            if isinstance(item, (tuple, list)):
+                ret += scan(item)
+            else:
+                var = vars.get(item, item)
+                if isinstance(var, (tuple, list)):
+                    ret += scan(var)
+                else:
+                    ret.append(var if not isinstance(var, str) else var[1:-1])
+        return ret
+
+    return ''.join(scan(collection))
+
+
+
 FILTERS = {
     'core.upper_camel_case'          : upper_camel_case,
     'core.lower_camel_case'          : lower_camel_case,
@@ -132,4 +155,6 @@ FILTERS = {
     'core.map_message_field_to_model': map_message_field_to_model,
     'core.map_default_value'         : map_default_value,
     'core.version'                   : version,
+    'core.build_uri'                 : build_uri,
 }
+
