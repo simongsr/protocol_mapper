@@ -41,7 +41,6 @@ DATA_TYPES = {
     'bool'     : lambda: False,
     'string'   : lambda: '""',
     'bytes'    : lambda: b'',
-    'void'     : lambda: None,
 }
 
 reserved = {
@@ -53,6 +52,7 @@ reserved = {
     'optional': 'OPTIONAL',
     'repeated': 'REPEATED',
     'alias'   : 'ALIAS',
+    'void'    : 'VOID',
     # 'true'    : 'TRUE',
     # 'false'   : 'FALSE',
 }
@@ -257,7 +257,10 @@ def build_parser() -> yacc.LRParser:
         p[0] = collection
 
     def p_endpoint(p):
-        r"""endpoint : NAME LPAREN field_type RPAREN COLON field_type modifier_collection SEMICOLUMN"""
+        r"""endpoint : NAME LPAREN VOID RPAREN COLON VOID modifier_collection SEMICOLUMN
+                     | NAME LPAREN VOID RPAREN COLON field_type modifier_collection SEMICOLUMN
+                     | NAME LPAREN field_type RPAREN COLON VOID modifier_collection SEMICOLUMN
+                     | NAME LPAREN field_type RPAREN COLON field_type modifier_collection SEMICOLUMN"""
         p[0] = {
             'type'       : 'endpoint',
             'name'       : p[1],
