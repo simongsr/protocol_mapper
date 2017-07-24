@@ -146,7 +146,7 @@ def build_lexer() -> lex.Lexer:
     t_RINTERVAL      = r'\]'
     t_LBRACKET       = r'\{'
     t_RBRACKET       = r'\}'
-    t_STRING_VALUE   = r'".*"|\'.*\''
+    t_STRING_VALUE   = r'".*?"|\'.*?\''
     t_NAME           = r'[a-zA-Z_]{1}\w*'
 
     def t_BOOLEAN_VALUE(t):
