@@ -132,7 +132,7 @@ CONTACT_URL        = BASE_URL + '/contact'
 CREATE_CONTACT_URL = CONTACT_URL + '/create'
 GET_CONTACT_URL    = CONTACT_URL + '/get'
 
-create_contact(Contact): int [method = 'POST'] [url = CREATE_CONTACT_URL];
-get_contact(int): Contact [method = 'GET'] [url = GET_CONTACT_URL];
+create_contact(Contact): int [method = 'POST'][url = CREATE_CONTACT_URL][type = 'REST'];
+get_contact(int): Contact [method = 'GET'][url = GET_CONTACT_URL][type = 'REST'];
 
 #send_message(Message): void [queue = '/messages'];

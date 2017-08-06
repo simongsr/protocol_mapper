@@ -257,17 +257,24 @@ def build_parser() -> yacc.LRParser:
         p[0] = collection
 
     def p_endpoint(p):
-        r"""endpoint : NAME LPAREN VOID RPAREN COLON VOID modifier_collection SEMICOLUMN
-                     | NAME LPAREN VOID RPAREN COLON field_type modifier_collection SEMICOLUMN
+        r"""endpoint : NAME LPAREN RPAREN COLON VOID modifier_collection SEMICOLUMN
+                     | NAME LPAREN RPAREN COLON field_type modifier_collection SEMICOLUMN
                      | NAME LPAREN field_type RPAREN COLON VOID modifier_collection SEMICOLUMN
                      | NAME LPAREN field_type RPAREN COLON field_type modifier_collection SEMICOLUMN"""
-        p[0] = {
-            'type'       : 'endpoint',
-            'name'       : p[1],
-            'input_type' : p[3],
-            'return_type': p[6],
-            'modifiers'  : p[7],
-        }
+
+        def make_new(name, return_type, modifiers, input_type='void'):
+            return {
+                'type'       : 'endpoint',
+                'name'       : name,
+                'input_type' : input_type,
+                'return_type': return_type,
+                'modifiers'  : modifiers,
+            }
+
+        if len(p) == 8:
+            p[0] = make_new(p[1], p[5], p[6])
+        else:
+            p[0] = make_new(p[1], p[6], p[7], input_type=p[3])
 
     def p_message(p):
         r"""message : MESSAGE NAME modifier_collection LBRACKET message_definition RBRACKET"""
@@ -427,7 +434,6 @@ def build_parser() -> yacc.LRParser:
                        | BOOL
                        | STRING
                        | BYTES
-                       | VOID
                        | nested_value"""
         p[0] = p[1]
 
@@ -765,15 +771,41 @@ def build(modules, buildername, params=[]):
         environment['objects'].update(_module['objects'])
         environment['endpoints'].update(_module['endpoints'])
 
+    def validate_endpoints(environment):
+
+        def get_message(path, object, type_, full_path=None):
+            if path == '':
+                return object
+            if path[0] in object['objects']:
+                obj = object['objects'][path[0]]
+                if obj['type'] != 'message':
+                    raise EndpointValidationException('Endpoint {0} type must be a message, got: {1}'.format(type_, obj['type']))
+                return get_message(path[1:], obj, type_, full_path=full_path)
+            raise EndpointValidationException('Cannot find {0} message: {1}'.format(type_, '.'.join(full_path)))
+
+        for endpoint in environment['endpoints'].values():
+            input_type  = endpoint['input_type']
+            if isinstance(input_type, str) and input_type != 'void' and input_type not in DATA_TYPES:
+                get_message(input_type, environment, type_='input', full_path=input_type)
+            return_type = endpoint['return_type']
+            if isinstance(return_type, str) and return_type != 'void' and return_type not in DATA_TYPES:
+                get_message(return_type, environment, type_='output', full_path=return_type)
+
     # builds models and messages graphs
     build_model_graph(environment)
     build_message_graph(environment)
+    validate_endpoints(environment)
 
     # makes
     builder = importlib.import_module('builders.{0}'.format(buildername))
     if not hasattr(builder, 'build') or not callable(builder.build):
         raise NameError("Missing 'build' function in builder: {0}".format(buildername))
     builder.build(environment, **params)
+
+
+class EndpointValidationException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
 
 
 class ConfigStruct:

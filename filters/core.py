@@ -1,6 +1,8 @@
 #!/usr/bin/env python3.5
 from collections import OrderedDict
 
+import re
+
 from main import DATA_TYPES
 
 __author__  = 'Simone Pandolfi'
@@ -119,6 +121,17 @@ def version(obj):
     return max(1, *(model_version(model) for model in models(obj)))
 
 
+def extract_string_value(string):
+    if not isinstance(string, str):
+        raise TypeError('Expected string was a valid string, got: {0}'.format(string))
+
+    match = re.match(r'^"(.*?)"$|^\'(.*?)\'$', string)
+    if match is not None:
+        m1, m2 = match.groups()
+        return m1 if m1 is not None else m2
+    return string
+
+
 def build_uri(collection, vars):
     if not isinstance(collection, (tuple, list)):
         raise TypeError("Expected collection was a collection, got: {0} ({1})".format(collection, type(collection).__name__))
@@ -135,10 +148,17 @@ def build_uri(collection, vars):
                 if isinstance(var, (tuple, list)):
                     ret += scan(var)
                 else:
-                    ret.append(var if not isinstance(var, str) else var[1:-1])
+                    ret.append(var if not isinstance(var, str) else extract_string_value(var))
         return ret
 
     return ''.join(scan(collection))
+
+
+def endpoints(schema):
+    if not isinstance(schema, dict) or 'endpoints' not in schema:
+        raise Exception("Expected 'schema' was a valid schema instance")
+
+    return (obj for obj in schema['endpoints'].values() if obj['type'] == 'endpoint')
 
 
 
@@ -155,6 +175,8 @@ FILTERS = {
     'core.map_message_field_to_model': map_message_field_to_model,
     'core.map_default_value'         : map_default_value,
     'core.version'                   : version,
+    'core.extract_string_value'      : extract_string_value,
     'core.build_uri'                 : build_uri,
+    'core.endpoints'                 : endpoints,
 }
 
