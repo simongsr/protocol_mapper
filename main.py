@@ -722,6 +722,9 @@ def build(modules, buildername, params=[]):
 
                     # TODO aggiungere anche un riferimento reverso? -- Su questo riflettere io devo
 
+                elif field['data_type'] not in DATA_TYPES:
+                    raise UnknowDataTypeException('Unknown data type: {0}'.format(field['data_type']))
+
                 for obj in message['objects'].values():
                     build(reservations, objects, obj, parent_message=message)
 
@@ -801,6 +804,11 @@ def build(modules, buildername, params=[]):
     if not hasattr(builder, 'build') or not callable(builder.build):
         raise NameError("Missing 'build' function in builder: {0}".format(buildername))
     builder.build(environment, **params)
+
+
+class UnknowDataTypeException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
 
 
 class EndpointValidationException(Exception):
