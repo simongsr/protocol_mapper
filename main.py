@@ -195,20 +195,30 @@ def build_parser() -> yacc.LRParser:
                              | object_collection
                              | """
 
-        def build(reservations=set(), module={}):
+        def build(reservations=set(), module=None):
+
+            def blank_mod():
+                return {
+                    'aliases'  : {},
+                    'objects'  : {},
+                    'vars'     : {},
+                    'endpoints': {},
+                }
+
             return {
                 'reservations': reservations,
-                'module'      : module,
+                'module'      : module if module is not None else blank_mod(),
             }
 
         if len(p) == 3:
-            env = build(p[1], p[2])
-        else:
+            p[0] = build(p[1], p[2])
+        elif len(p) == 2:
             if isinstance(p[1], dict):
-                env = build(module=p[1])
+                p[0] = build(module=p[1])
             else:
-                env = build(reservations=p[1])
-        p[0] = env
+                p[0] = build(reservations=p[1])
+        else:
+            p[0] = build()
 
     def p_object_collection(p):
         r"""object_collection : object_collection alias
