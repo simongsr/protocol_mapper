@@ -121,6 +121,12 @@ def version(obj):
     return max(1, *(model_version(model) for model in models(obj)))
 
 
+def enum_value(value):
+    if isinstance(value, (list, tuple)):
+        return value[0]
+    return value
+
+
 def extract_string_value(string):
     if not isinstance(string, str):
         raise TypeError('Expected string was a valid string, got: {0}'.format(string))
@@ -157,8 +163,15 @@ def build_uri(collection, vars):
 def endpoints(schema):
     if not isinstance(schema, dict) or 'endpoints' not in schema:
         raise Exception("Expected 'schema' was a valid schema instance")
-
     return (obj for obj in schema['endpoints'].values() if obj['type'] == 'endpoint')
+
+
+def is_raw_type(field):
+    if not isinstance(field, dict) or field['type'] != 'field':
+        raise TypeError('Expected a field object, got: {0}'.format(field))
+    if not isinstance(field['data_type'], str):
+        return False
+    return field['data_type'] in DATA_TYPES
 
 
 
@@ -176,7 +189,9 @@ FILTERS = {
     'core.map_default_value'         : map_default_value,
     'core.version'                   : version,
     'core.extract_string_value'      : extract_string_value,
+    'core.enum_value'                : enum_value,
     'core.build_uri'                 : build_uri,
     'core.endpoints'                 : endpoints,
+    'core.is_raw_type'               : is_raw_type,
 }
 

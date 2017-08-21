@@ -741,49 +741,6 @@ def build(modules, buildername, params=[]):
         for obj in environment['objects'].values():
             build(environment['reservations'], environment['objects'], obj)
 
-    if not hasattr(modules, '__iter__') or not callable(modules.__iter__):
-        raise TypeError('Expected "modules" was a collection of strings, got {0}'.format(type(modules).__name__))
-    if not isinstance(buildername, str):
-        raise TypeError('Builder must be the name of a builder, got {0}'.format(type(buildername).__name__))
-    if not hasattr(params, '__iter__') or not callable(params.__iter__):
-        raise TypeError('Expected "params" was a collection of strings, got {0}'.format(type(params).__name__))
-
-    environment = {
-        'reservations': set(),
-        'objects'     : OrderedDict(),
-        'aliases'     : {},
-        'vars'        : {},
-        'endpoints'   : {},
-    }
-
-    for modulename in modules:
-        module       = parse(modulename)
-
-        # merges the IDs set
-        intersection = module['reservations'].intersection(environment['reservations'])
-        if any(intersection):
-            raise Exception('[reservation] Duplicated IDs: {0}'.format(', '.join(str(_id) for _id in intersection)))
-        environment['reservations'].update(module['reservations'])
-
-        # merges aliases
-        _module = module['module']
-        intersection = set(_module['aliases'].keys()).intersection(environment['aliases'].keys())
-        if any(intersection):
-            raise Exception('[alias] Duplicated aliases: {0}'.format(', '.join(name for name in intersection)))
-        environment['aliases'].update(_module['aliases'])
-
-        # merges the modules
-        intersection = set(_module['objects'].keys()).intersection(set(environment['objects'].keys()))
-        if any(intersection):
-            raise Exception("Duplicated objects names: {0}".format(', '.join(intersection)))
-
-        # for obj in module['module']['objects'].values():
-        #     obj['vars'] = module['module']['vars']  # inserts module's variables into the object
-        environment['vars'].update(_module['vars'])
-
-        environment['objects'].update(_module['objects'])
-        environment['endpoints'].update(_module['endpoints'])
-
     def validate_endpoints(environment):
 
         def get_message(path, object, type_, full_path=None):
@@ -804,16 +761,57 @@ def build(modules, buildername, params=[]):
             if isinstance(return_type, str) and return_type != 'void' and return_type not in DATA_TYPES:
                 get_message(return_type, environment, type_='output', full_path=return_type)
 
+    if not hasattr(modules, '__iter__') or not callable(modules.__iter__):
+        raise TypeError('Expected "modules" was a collection of strings, got {0}'.format(type(modules).__name__))
+    if not isinstance(buildername, str):
+        raise TypeError('Builder must be the name of a builder, got {0}'.format(type(buildername).__name__))
+    if not hasattr(params, '__iter__') or not callable(params.__iter__):
+        raise TypeError('Expected "params" was a collection of strings, got {0}'.format(type(params).__name__))
+
+    schema = {
+        'reservations': set(),
+        'objects'     : OrderedDict(),
+        'aliases'     : {},
+        'vars'        : {},
+        'endpoints'   : {},
+    }
+
+    for modulename in modules:
+        module       = parse(modulename)
+
+        # merges the IDs set
+        intersection = module['reservations'].intersection(schema['reservations'])
+        if any(intersection):
+            raise Exception('[reservation] Duplicated IDs: {0}'.format(', '.join(str(_id) for _id in intersection)))
+        schema['reservations'].update(module['reservations'])
+
+        _module = module['module']
+
+        # merges aliases
+        intersection = set(_module['aliases'].keys()).intersection(schema['aliases'].keys())
+        if any(intersection):
+            raise Exception('[alias] Duplicated aliases: {0}'.format(', '.join(name for name in intersection)))
+        schema['aliases'].update(_module['aliases'])
+
+        # merges the modules
+        intersection = set(_module['objects'].keys()).intersection(set(schema['objects'].keys()))
+        if any(intersection):
+            raise Exception("Duplicated objects names: {0}".format(', '.join(intersection)))
+        schema['objects'].update(_module['objects'])
+
+        schema['vars'].update(_module['vars'])
+        schema['endpoints'].update(_module['endpoints'])
+
     # builds models and messages graphs
-    build_model_graph(environment)
-    build_message_graph(environment)
-    validate_endpoints(environment)
+    build_model_graph(schema)
+    build_message_graph(schema)
+    validate_endpoints(schema)
 
     # makes
     builder = importlib.import_module('builders.{0}'.format(buildername))
     if not hasattr(builder, 'build') or not callable(builder.build):
         raise NameError("Missing 'build' function in builder: {0}".format(buildername))
-    builder.build(environment, **params)
+    builder.build(schema, **params)
 
 
 class UnknowDataTypeException(Exception):

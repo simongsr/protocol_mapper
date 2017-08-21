@@ -2,6 +2,7 @@ import json
 
 from django.contrib.auth.models import User
 from django.db import models
+import django.utils
 
 __author__  = 'ProtocolMapper by Simone Pandolfi'
 __email__   = 'simopandolfi@gmail.com'
@@ -14,16 +15,16 @@ __version__ = {{ version }}
 """
 
 
-{%- macro make_enum(enum) %}
-{% for key, value in enum['items'].items() %}
-{{ key|upper }} = {{ value|upper }}
-{% endfor %}
-{{ enum.name|upper }} = (
-    {% for key, value in enum['items'].items() %}
-    ({{ key|upper }}, {{ value }}),
-    {% endfor %}
-)
-{% endmacro -%}
+# {%- macro make_enum(enum) %}
+# {% for key, value in enum['items'].items() %}
+# {{ key|upper }} = {{ value|upper }}
+# {% endfor %}
+# {{ enum.name|upper }} = (
+#     {% for key, value in enum['items'].items() %}
+#     ({{ key|upper }}, {{ value }}),
+#     {% endfor %}
+# )
+# {% endmacro -%}
 
 
 {%- macro make_model(model) %}
@@ -54,18 +55,18 @@ class {{ model|python_django.class_name }}(models.Model):
     def __str__(self):
         return '{{ model.fullname|join("_") }}: {0}'.format(self.id)
 
-    {% for field in model.fields.values() if field.id > 0 and field.data_type.type == 'model' %}
-    @classmethod
-    def get_{{ field.name }}_class(cls):
-        return {{ field|python_django.class_name }}
-
-    {% endfor %}
-    {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
-    @classmethod
-    def get_{{ field.name }}_class(cls):
-        return {{ field|python_django.class_name }}
-
-    {% endfor %}
+    # {% for field in model.fields.values() if field.id > 0 and field.data_type.type == 'model' %}
+    # @classmethod
+    # def get_{{ field.name }}_class(cls):
+    #     return {{ field|python_django.class_name }}
+    #
+    # {% endfor %}
+    # {% for field in model.fields.values() if field.id > 0 and field.multiplicity == 'repeated' and field.data_type is string %}
+    # @classmethod
+    # def get_{{ field.name }}_class(cls):
+    #     return {{ field|python_django.class_name }}
+    #
+    # {% endfor %}
 {% endif %}
 
 {% endmacro -%}
@@ -246,9 +247,9 @@ class {{ model|python_django.class_name }}(models.Model):
 
 
 
-{% for enum in enums %}
-{{ make_enum(enum) }}
-{% endfor %}
+# {% for enum in enums %}
+# {{ make_enum(enum) }}
+# {% endfor %}
 
 {% for model in models %}
 {{ make_model(model) }}

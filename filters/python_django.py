@@ -61,10 +61,8 @@ MODIFIERS      = (
     BUILDER_PREFIX + 'verbose_name',
     BUILDER_PREFIX + 'validators',
     BUILDER_PREFIX + 'max_length',
+    BUILDER_PREFIX + 'related_name',
 )
-
-
-JOIN_STR = 'Nstd'
 
 
 def class_name(obj):
@@ -72,20 +70,24 @@ def class_name(obj):
         raise TypeError("Obj must be an instance of a model, a message or a field, got: {0}".format(obj))
 
     if obj['type'] == 'field':
-        return JOIN_STR.join((class_name(obj['parent']), core.upper_camel_case(obj['name'])))
-    return core.upper_camel_case(obj['fullname'], splitstr=JOIN_STR)
+        return '_nested_'.join((class_name(obj['parent']), core.upper_camel_case(obj['name'])))
+    return core.upper_camel_case(obj['fullname'], splitstr='_nested_')
 
 
 def prepare_args(modifiers):
     if not isinstance(modifiers, dict):
         raise TypeError('Expected modifiers was a dict, got: {0}'.format(type(modifiers).__name__))
     args = []
+    if 'key' in modifiers:
+        modifiers['primary_key'] = True
     for key, value in modifiers.items():
         if key in MODIFIERS:
             if key.startswith(BUILDER_PREFIX):
                 key = key[len(BUILDER_PREFIX):]
             if isinstance(value, list):
                 value = value[-1]
+            if value == '__NOW__':
+                value = 'django.utils.timezone.now'
             args.append('{0}={1}'.format(key, value))
     return args
 
@@ -116,7 +118,9 @@ def field_declaration(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args = ', '.join([class_name(datatype)] + prepare_args(args))
+        ref_model = class_name(datatype)
+        ref_model = ref_model if ref_model == 'User' else "'{0}'".format(ref_model)
+        args = ', '.join([ref_model] + prepare_args(args))
         if field['modifiers'].get('python_django__one_to_one', False):
             return struct.format(fieldtype='OneToOneField', args=args)
         return struct.format(fieldtype='ForeignKey', args=args)
@@ -125,7 +129,9 @@ def field_declaration(field):
         args = OrderedDict(field['modifiers'])
         if field['multiplicity'] == 'required':
             args['blank'] = False
-        args = ', '.join([class_name(datatype)] + prepare_args(args))
+        ref_model = class_name(datatype)
+        ref_model = ref_model if ref_model == 'User' else "'{0}'".format(ref_model)
+        args = ', '.join([ref_model] + prepare_args(args))
         return struct.format(fieldtype='ManyToManyField', args=args)
 
     if isinstance(datatype, str) and datatype in FIELD_MAPPING:

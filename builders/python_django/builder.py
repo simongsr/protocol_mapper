@@ -23,6 +23,7 @@ __ENVIRONMENT.filters.update(python_django.FILTERS)
 def build(schema, **kwargs):
     __create_outdir_if_not_exists(**kwargs)
     build_models(schema, **kwargs)
+    build_enums(schema, **kwargs)
     build_admin(schema, **kwargs)
     build_urls(schema, **kwargs)
     build_views(schema, **kwargs)
@@ -57,6 +58,17 @@ def build_models(schema, outdir, **kwargs):
     context         = {
         'enums'   : __gen_enums(schema),
         'models'  : __gen_models(schema),
+    }
+    source          = template.render(context)
+    with open(os.path.join(outdir, output_filename), 'w') as fp:
+        fp.write(source)
+
+
+def build_enums(schema, outdir, **kwargs):
+    output_filename = 'enums.py'
+    template        = __ENVIRONMENT.get_template(output_filename)
+    context         = {
+        'enums': __gen_enums(schema),
     }
     source          = template.render(context)
     with open(os.path.join(outdir, output_filename), 'w') as fp:
