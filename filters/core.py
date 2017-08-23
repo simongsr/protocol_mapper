@@ -174,6 +174,10 @@ def is_raw_type(field):
     return field['data_type'] in DATA_TYPES
 
 
+def key_fields(model):
+    return (f for f in model['fields'].values() if f['multiplicity'] == 'required' and 'key' in f['modifiers'] and is_raw_type(f))
+
+
 
 FILTERS = {
     'core.upper_camel_case'          : upper_camel_case,
@@ -193,5 +197,6 @@ FILTERS = {
     'core.build_uri'                 : build_uri,
     'core.endpoints'                 : endpoints,
     'core.is_raw_type'               : is_raw_type,
+    'core.key_fields'                : key_fields,
 }
 

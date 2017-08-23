@@ -57,6 +57,7 @@ def build_models(schema, outdir, **kwargs):
     context         = {
         'enums' : __gen_enums(schema),
         'models': __gen_models(schema),
+        'schema': schema,
     }
     source          = template.render(context)
     with open(os.path.join(outdir, output_filename), 'w') as fp:
