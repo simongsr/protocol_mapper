@@ -1,3 +1,9 @@
+from collections import OrderedDict
+
+import itertools
+
+from filters import core
+
 __author__  = 'Simone Pandolfi'
 __email__   = '<simopandolfi@gmail.com>'
 __version__ = (0, 0, 1)
@@ -61,11 +67,24 @@ def association_tablename(field):
     return 'association_table___{0}___{1}'.format(modelname(field['parent']), modelname(field['data_type']))
 
 
+def association_foreignkeys_dict(field):
+
+    def kv(f, m):
+        model_name = modelname(m)  #field['parent'])
+        field_name = f['name']
+        return "'{0}___{1}'".format(model_name, field_name), "'{0}.{1}'".format(model_name, field_name)
+
+    parent_keyfields   = [kv(keyfield, field['parent']) for keyfield in core.key_fields(field['parent'])]
+    datatype_keyfields = [kv(keyfield, field['data_type']) for keyfield in core.key_fields(field['data_type'])]
+    return OrderedDict(itertools.chain(parent_keyfields, datatype_keyfields))
+
+
 
 FILTERS = {
-    'sqlalchemy.modelname'               : modelname,
-    'sqlalchemy.datatype'                : datatype,
-    'sqlalchemy.column_constraints'      : column_constraints,
-    'sqlalchemy.column_constraints_count': column_constraints_count,
-    'sqlalchemy.association_tablename'   : association_tablename,
+    'sqlalchemy.modelname'                   : modelname,
+    'sqlalchemy.datatype'                    : datatype,
+    'sqlalchemy.column_constraints'          : column_constraints,
+    'sqlalchemy.column_constraints_count'    : column_constraints_count,
+    'sqlalchemy.association_tablename'       : association_tablename,
+    'sqlalchemy.association_foreignkeys_dict': association_foreignkeys_dict,
 }
