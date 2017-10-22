@@ -5,7 +5,7 @@ import os
 import sys
 from collections import OrderedDict
 from datetime import date, datetime
-from functools import reduce
+from itertools import chain
 
 import jsonpath_rw
 from cerberus import Validator
@@ -43,20 +43,25 @@ DATA_TYPES = {
     'bytes'    : lambda: b'',
 }
 
+KINDS = ('required', 'optional', 'repeated')
+
 reserved = {
     'model'   : 'MODEL',
     'message' : 'MESSAGE',
     'enum'    : 'ENUM',
     'reserved': 'RESERVED',
-    'required': 'REQUIRED',
-    'optional': 'OPTIONAL',
-    'repeated': 'REPEATED',
+    #'required': 'REQUIRED',
+    #'optional': 'OPTIONAL',
+    #'repeated': 'REPEATED',
     'alias'   : 'ALIAS',
     'void'    : 'VOID',
     # 'true'    : 'TRUE',
     # 'false'   : 'FALSE',
+    'resource': 'RESOURCE',
+    'service' : 'SERVICE',
 }
 reserved.update({dtype: dtype.upper() for dtype in DATA_TYPES})
+reserved.update({kind: kind.upper() for kind in KINDS})
 
 tokens = [
     'ASSIGN',
@@ -74,6 +79,7 @@ tokens = [
     'RINTERVAL',
     'LBRACKET',
     'RBRACKET',
+    'AT',
     'KEYWORD',
     'FLOAT_VALUE',
     'INTEGER_VALUE',
@@ -146,6 +152,7 @@ def build_lexer() -> lex.Lexer:
     t_RINTERVAL      = r'\]'
     t_LBRACKET       = r'\{'
     t_RBRACKET       = r'\}'
+    t_AT             = r'@'
     t_STRING_VALUE   = r'".*?"|\'.*?\''
     t_NAME           = r'[a-zA-Z_]{1}\w*'
 
@@ -163,6 +170,9 @@ def build_lexer() -> lex.Lexer:
         r"""\d+"""
         t.value = int(t.value)
         return t
+
+    # def t_TIMESTAMP(t):  # TODO implementare le conversioni per timestamp, date e time (usando il formato ISO)
+    #     r""""""
 
     def t_KEYWORD(t):
         r"""[a-zA-Z_]{1}\w*"""
@@ -187,387 +197,374 @@ def build_lexer() -> lex.Lexer:
 
 def build_parser() -> yacc.LRParser:
     lexer          = build_lexer()
-    __reservations = set()
 
-    def p_data_environment(p):
-        r"""data_environment : reserved_collection object_collection
-                             | reserved_collection
-                             | object_collection
-                             | """
+    def p_schema(p):
+        r"""schema : schema reservation
+                   | schema enum
+                   | schema model
+                   | schema message
+                   | schema resource
+                   | schema service
+                   | schema variable
+                   | schema alias
+                   | reservation
+                   | enum
+                   | model
+                   | message
+                   | resource
+                   | service
+                   | variable
+                   | alias"""
 
-        def build(reservations=set(), module=None):
-
-            def blank_mod():
-                return {
-                    'aliases'  : {},
-                    'objects'  : {},
-                    'vars'     : {},
-                    'endpoints': {},
-                }
-
-            return {
-                'reservations': reservations,
-                'module'      : module if module is not None else blank_mod(),
-            }
-
-        if len(p) == 3:
-            p[0] = build(p[1], p[2])
-        elif len(p) == 2:
-            if isinstance(p[1], dict):
-                p[0] = build(module=p[1])
-            else:
-                p[0] = build(reservations=p[1])
-        else:
-            p[0] = build()
-
-    def p_object_collection(p):
-        r"""object_collection : object_collection alias
-                              | object_collection enum
-                              | object_collection model
-                              | object_collection message
-                              | object_collection endpoint
-                              | object_collection name_assignment
-                              | alias
-                              | enum
-                              | model
-                              | message
-                              | endpoint
-                              | name_assignment"""
-
-        def get_blank():
-            return {
-                'objects'  : OrderedDict(),
-                'vars'     : {},
-                'aliases'  : {},
-                'endpoints': {},
-            }
-
-        def insert(collection, item):
-            # looks for an already assigned name
-            name = item['name'] if isinstance(item, dict) else item[0]
-            if name in reduce(lambda x, y: set(x).union(set(y)), (v.keys() for k, v in collection.items())):
-                raise Exception('[object collection] Duplicated object name: {0}'.format(item['name']))
-            if isinstance(item, dict):
-                # item is an alias | enum | model | message
-                if item['type'] == 'alias':
-                    collection['aliases'][name] = item['value']
-                elif item['type'] == 'endpoint':
-                    collection['endpoints'][name] = item
-                else:
-                    collection['objects'][name] = item
-            else:
-                # item is a 'name assignment'
-                collection['vars'][name] = item[1]
-            return collection
+        def add(arg, schema=Schema()):
+            schema.add(arg)
+            return schema
 
         if len(p) == 3:
-            collection = insert(p[1], p[2])
+            p[0] = add(p[2], schema=p[1])
         else:
-            collection = insert(get_blank(), p[1])
-        p[0] = collection
+            p[0] = add(p[1])
 
-    def p_endpoint(p):
-        r"""endpoint : NAME LPAREN RPAREN COLON VOID modifier_collection SEMICOLUMN
-                     | NAME LPAREN RPAREN COLON field_type modifier_collection SEMICOLUMN
-                     | NAME LPAREN field_type RPAREN COLON VOID modifier_collection SEMICOLUMN
-                     | NAME LPAREN field_type RPAREN COLON field_type modifier_collection SEMICOLUMN"""
-
-        def make_new(name, return_type, modifiers, input_type='void'):
-            return {
-                'type'       : 'endpoint',
-                'name'       : name,
-                'input_type' : input_type,
-                'return_type': return_type,
-                'modifiers'  : modifiers,
-            }
-
-        if len(p) == 8:
-            p[0] = make_new(p[1], p[5], p[6])
+    def p_reservation(p):
+        r"""reservation : RESERVED LINTERVAL id COMMA id RINTERVAL
+                        | RESERVED id_array"""
+        if len(p) == 7:
+            p[0] = Reservation(*[_id for _id in range(p[3], p[5] + 1)])
         else:
-            p[0] = make_new(p[1], p[6], p[7], input_type=p[3])
+            p[0] = Reservation(*p[2])
 
-    def p_message(p):
-        r"""message : MESSAGE NAME modifier_collection LBRACKET message_definition RBRACKET"""
-
-        def fullname(name, objects: dict) -> dict:
-            for obj in objects.values():
-                obj['fullname'] = (name if isinstance(name, list) else [name]) + obj['fullname']
-                if obj['type'] == 'message':
-                    fullname(name, obj['objects'])
-            return objects
-
-        p[0] = {
-            'type'     : 'message',
-            'name'     : p[2],
-            'fullname' : [p[2]],
-            'modifiers': p[3],
-            'fields'   : p[5]['fields'],
-            'objects'  : fullname(p[2], p[5]['objects']),
-        }
-
-    def p_message_definition(p):
-        r"""message_definition : message_definition enum
-                               | message_definition message
-                               | message_definition message_field_declaration
-                               | enum
-                               | message
-                               | message_field_declaration
-                               | """
-        def get_blank():
-            return {
-                'objects': OrderedDict(),
-                'fields' : OrderedDict(),
-            }
-
-        def insert(content, item):
-            collection = 'fields' if item['type'] == 'field' else 'objects'
-            if item['name'] in content[collection]:
-                raise Exception('[message definition] Duplicated nested object name: {0} ({1})'.format(
-                    item['name'],
-                    item['type']
-                ))
-            content[collection][item['name']] = item
-            return content
-
-        if   len(p) == 3:
-            collection = insert(p[1], p[2])
-        elif len(p) == 2:
-            collection = insert(get_blank(), p[1])
+    def p_id_array(p):
+        r"""id_array : id_array COMMA id
+                     | id"""
+        if len(p) == 4:
+            p[1].add(p[3])
+            p[0] = p[1]
         else:
-            collection = get_blank()
-        p[0]           = collection
+            p[0] = {p[1]}
 
-    def p_message_field_declaration(p):
-        r"""message_field_declaration : field_multiplicity field_type NAME ASSIGN id modifier_collection SEMICOLUMN
-                                      | field_multiplicity field_type NAME modifier_collection SEMICOLUMN"""
-        nonlocal __reservations
+    def p_variable(p):
+        r"""variable : NAME ASSIGN datatype
+                     | NAME ASSIGN full_qualified_name"""
+        p[0] = Variable(p[1], p[3])
 
-        def build(multiplicity, data_type, name, modifiers, _id=None):
-            if _id is not None:
-                if _id in __reservations:
-                    raise Exception('[message field declaration] ID was marked as reserved: {0}'.format(_id))
-                if _id <= 0:
-                    raise Exception('[message field declaration] ID must be greater than zero: {0}'.format(_id))
-
-            return {
-                'type'        : 'field',
-                'multiplicity': multiplicity,
-                'data_type'   : data_type,
-                'name'        : name,
-                'id'          : _id,
-                'modifiers'   : modifiers,
-            }
-
-        p[0] = build(p[1], p[2], p[3], p[6], _id=p[5]) if len(p) == 8 else build(p[1], p[2], p[3], p[4])
-
-    def p_model(p):
-        r"""model : MODEL NAME modifier_collection LBRACKET model_definition RBRACKET"""
-
-        def fullname(name, objects: dict) -> dict:
-            for obj in objects.values():
-                obj['fullname'] = (name if isinstance(name, list) else [name]) + obj['fullname']
-                if obj['type'] == 'model':
-                    fullname(name, obj['objects'])
-            return objects
-
-        p[0] = make_model(name=p[2], modifiers=p[3], fields=p[5]['fields'], objects=fullname(p[2], p[5]['objects']))
-
-    def p_model_definition(p):
-        r"""model_definition : model_definition enum
-                             | model_definition model
-                             | model_definition model_field_declaration
-                             | enum
-                             | model
-                             | model_field_declaration
-                             | """
-
-        def get_blank():
-            return {
-                'objects': OrderedDict(),
-                'fields' : OrderedDict(),
-            }
-
-        def insert(content, item):
-            collection = 'fields' if item['type'] == 'field' else 'objects'
-            if item['name'] in content[collection]:
-                raise Exception('[model definition] Duplicated nested object name: {0} ({1})'.format(
-                    item['name'],
-                    item['type']
-                ))
-            content[collection][item['name']] = item
-            return content
-
-        if   len(p) == 3:
-            collection = insert(p[1], p[2])
-        elif len(p) == 2:
-            collection = insert(get_blank(), p[1])
-        else:
-            collection = get_blank()
-        p[0]           = collection
-    
-    def p_model_field_declaration(p):
-        r"""model_field_declaration : field_multiplicity field_type NAME ASSIGN id modifier_collection SEMICOLUMN"""
-        nonlocal __reservations
-
-        _id = p[5]
-        if _id in __reservations:
-            raise Exception('[model field declaration] ID was marked as reserved: {0}'.format(_id))
-        if _id <= 0:
-            raise Exception('[model field declaration] ID must be greater than zero: {0}'.format(_id))
-
-        p[0] = make_model_field(p[1], p[2], p[3], _id, p[6])
-
-    def p_field_multiplicity(p):
-        r"""field_multiplicity : REQUIRED
-                               | OPTIONAL
-                               | REPEATED"""
-        p[0] = p[1]
-
-    def p_field_type(p):
-        r"""field_type : DOUBLE
-                       | FLOAT
-                       | INT32
-                       | INT64
-                       | UINT32
-                       | UINT64
-                       | SINT32
-                       | SINT64
-                       | FIXED32
-                       | FIXED64
-                       | SFIXED32
-                       | SFIXED64
-                       | INT
-                       | LONG
-                       | DATE
-                       | TIMESTAMP
-                       | TIME
-                       | BOOL
-                       | STRING
-                       | BYTES
-                       | nested_value"""
-        p[0] = p[1]
-
-    def p_modifier_collection(p):
-        r"""modifier_collection : modifier_collection LINTERVAL name_assignment RINTERVAL
-                                | modifier_collection LINTERVAL NAME RINTERVAL
-                                | LINTERVAL name_assignment RINTERVAL
-                                | LINTERVAL NAME RINTERVAL
-                                | """
-
-        def key_value(aux):
-            if isinstance(aux, tuple):
-                return aux    # name_assignment
-            return aux, True  # nested_value
-
-        if len(p) == 5:
-            key, value          = key_value(p[3])
-            collection          = p[1]
-            if key in collection:
-                raise Exception('[modifier collection] Duplicated key: {0}'.format(key))
-            collection[key]     = value
-        else:
-            collection          = OrderedDict()
-            if len(p) == 4:
-                key, value      = key_value(p[2])
-                collection[key] = value
-        p[0]                    = collection
+    def p_alias(p):
+        r"""alias : ALIAS NAME full_qualified_name"""
+        p[0] = Alias(p[2], p[3])
 
     def p_enum(p):
-        r"""enum : ENUM NAME LBRACKET enum_definition RBRACKET"""
-        p[0] = {
-            'type'    : 'enum',
-            'name'    : p[2],
-            'fullname': [p[2]],
-            'items'   : p[4],
-        }
+        r"""enum : ENUM NAME LBRACKET enum_content RBRACKET"""
+        p[0] = Enum(p[2], choices=p[4])
 
-    def p_enum_definition(p):
-        r"""enum_definition : enum_definition COMMA name_assignment
-                            | enum_definition COMMA NAME
-                            | name_assignment
-                            | NAME"""
+    def p_enum_content(p):
+        r"""enum_content : enum_content COMMA NAME ASSIGN basetype
+                         | enum_content COMMA NAME
+                         | NAME ASSIGN basetype
+                         | NAME"""
 
-        def add(collection, aux):
-            # if aux is an instance of a tuple, than it means that the parser recognized it as a 'name_assignment',
-            # otherwise is has been intended as a 'NAME'
-            key, value = aux if isinstance(aux, tuple) else (aux, len(collection))
+        def add(key, value=None, collection=OrderedDict()):
             if key in collection:
-                raise Exception('[enum definition] Duplicated key: {0}'.format(key))
+                raise DuplicatedEnumChoiceException('Duplicated enum choice: {0}'.format(key))
             collection[key] = value
             return collection
 
-        p[0] = add(p[1], p[3]) if len(p) == 4 else add(OrderedDict(), p[1])
+        if len(p) == 6:
+            p[0] = add(p[3], value=p[5], collection=p[1])
+        elif len(p) == 4:
+            if isinstance(p[1], dict):
+                p[0] = add(p[3], collection=p[1])
+            else:
+                p[0] = add(p[1], value=p[3])
+        else:
+            p[0] = add(p[1])
 
-    def p_alias(p):
-        r"""alias : ALIAS NAME nested_value"""
-        p[0] = {
-            'type' : 'alias',
-            'name' : p[2],
-            'value': p[3]
-        }
+    def p_model(p):
+        r"""model : annotation_array MODEL NAME modifier_array LBRACKET model_content RBRACKET"""
+        gen_annotations = ((k, v) for k, v in p[1].items())
+        gen_modifiers   = ((k, v) for k, v in p[4].items())
+        gen_models      = (x for x in p[6] if isinstance(x, Model))
+        gen_enums       = (x for x in p[6] if isinstance(x, Enum))
+        gen_fields      = (x for x in p[6] if isinstance(x, Field))
+        p[0] = Model(p[3], modifiers=chain(gen_annotations, gen_modifiers), models=gen_models, enums=gen_enums, fields=gen_fields)
 
-    def p_reserved_collection(p):
-        r"""reserved_collection : reserved_collection RESERVED LINTERVAL id COMMA id RINTERVAL SEMICOLUMN
-                                | reserved_collection RESERVED id_collection SEMICOLUMN
-                                | RESERVED LINTERVAL id COMMA id RINTERVAL SEMICOLUMN
-                                | RESERVED id_collection SEMICOLUMN"""
-        nonlocal __reservations
+    def p_model_content(p):
+        r"""model_content : model_content model
+                          | model_content enum
+                          | model_content model_field
+                          | model
+                          | enum
+                          | model_field"""
+        if len(p) == 3:
+            p[1].append(p[2])
+            p[0] = p[1]
+        else:
+            p[0] = [p[1]]
 
-        def add(collection, ids):
-            ids = ids if isinstance(ids, set) else {_id for _id in ids}
-            intersection = collection.intersection(ids)
-            if any(intersection):
-                raise Exception('[reservation] Duplicated IDs: {0}'.format(', '.join(str(_id) for _id in intersection)))
-            collection.update(ids)
+    def p_model_field(p):
+        r"""model_field : annotation_array REQUIRED full_qualified_name NAME ASSIGN id modifier_array
+                        | annotation_array OPTIONAL full_qualified_name NAME ASSIGN id modifier_array
+                        | annotation_array REPEATED full_qualified_name NAME ASSIGN id modifier_array
+                        | annotation_array REQUIRED basetype NAME ASSIGN id modifier_array
+                        | annotation_array OPTIONAL basetype NAME ASSIGN id modifier_array
+                        | annotation_array REPEATED basetype NAME ASSIGN id modifier_array"""
+        annotation_gen = ((k, v) for k, v in p[1].items())
+        modifiers_gen  = ((k, v) for k, v in p[7].items())
+        p[0] = Field(p[4], p[6], p[3], p[1], modifiers=chain(annotation_gen, modifiers_gen))
+
+    def p_message(p):
+        r"""message : annotation_array MESSAGE NAME modifier_array LBRACKET message_content RBRACKET"""
+        gen_annotations = ((k, v) for k, v in p[1].items())
+        gen_modifiers   = ((k, v) for k, v in p[4].items())
+        gen_messages    = (x for x in p[6] if isinstance(x, Message))
+        gen_enums       = (x for x in p[6] if isinstance(x, Enum))
+        gen_fields      = (x for x in p[6] if isinstance(x, Field))
+        p[0] = Message(p[3], modifiers=chain(gen_annotations, gen_modifiers), messages=gen_messages, enum=gen_enums, fields=gen_fields)
+
+    def p_message_content(p):
+        r"""message_content : message_content message
+                            | message_content enum
+                            | message_content message_field
+                            | message
+                            | enum
+                            | message_field"""
+        if len(p) == 3:
+            p[1].append(p[2])
+            p[0] = p[1]
+        else:
+            p[0] = [p[1]]
+
+    def p_message_field(p):
+        r"""message_field : annotation_array REQUIRED full_qualified_name NAME ASSIGN id modifier_array
+                          | annotation_array OPTIONAL full_qualified_name NAME ASSIGN id modifier_array
+                          | annotation_array REPEATED full_qualified_name NAME ASSIGN id modifier_array
+                          | annotation_array REQUIRED basetype NAME ASSIGN id modifier_array
+                          | annotation_array OPTIONAL basetype NAME ASSIGN id modifier_array
+                          | annotation_array REPEATED basetype NAME ASSIGN id modifier_array
+                          | annotation_array REQUIRED full_qualified_name NAME modifier_array
+                          | annotation_array OPTIONAL full_qualified_name NAME modifier_array
+                          | annotation_array REPEATED full_qualified_name NAME modifier_array
+                          | annotation_array REQUIRED basetype NAME modifier_array
+                          | annotation_array OPTIONAL basetype NAME modifier_array
+                          | annotation_array REPEATED basetype NAME modifier_array"""
+        annotation_gen = ((k, v) for k, v in p[1].items())
+        if len(p) == 8:
+            modifiers_gen = ((k, v) for k, v in p[7].items())
+            _id           = p[6]
+        else:
+            modifiers_gen = ((k, v) for k, v in p[5].items())
+            _id           = None
+        p[0] = Field(p[4], _id, p[3], p[2], modifiers=chain(annotation_gen, modifiers_gen))
+
+    def p_resource(p):
+        r"""resource : annotation_array RESOURCE NAME modifier_array LBRACKET resource_content RBRACKET"""
+        gen_annotations = ((k, v) for k, v in p[1].items())
+        gen_modifiers   = ((k, v) for k, v in p[4].items())
+        p[0] = Resource(p[3], endpoints=p[6], modifiers=chain(gen_annotations, gen_modifiers))
+
+    def p_resource_content(p):
+        r"""resource_content : resource_content endpoint
+                             | endpoint"""
+        if len(p) == 3:
+            p[1].append(p[2])
+            p[0] = p[1]
+        else:
+            p[0] = [p[1]]
+
+    def p_endpoint(p):
+        r"""endpoint : annotation_array NAME LPAREN full_qualified_name RPAREN COLON full_qualified_name modifier_array
+                     | annotation_array NAME LPAREN full_qualified_name RPAREN COLON basetype modifier_array
+                     | annotation_array NAME LPAREN full_qualified_name RPAREN COLON VOID modifier_array
+                     | annotation_array NAME LPAREN basetype RPAREN COLON full_qualified_name modifier_array
+                     | annotation_array NAME LPAREN basetype RPAREN COLON basetype modifier_array
+                     | annotation_array NAME LPAREN basetype RPAREN COLON VOID modifier_array
+                     | annotation_array NAME LPAREN RPAREN COLON full_qualified_name modifier_array
+                     | annotation_array NAME LPAREN RPAREN COLON basetype modifier_array
+                     | annotation_array NAME LPAREN RPAREN COLON VOID modifier_array"""
+        gen_annotations = ((k, v) for k, v in p[1].items())
+        if len(p) == 9:
+            gen_modifiers = ((k, v) for k, v in p[8].items())
+            payload       = p[4]
+            response      = p[7]
+        else:
+            gen_modifiers = ((k, v) for k, v in p[7].items())
+            payload       = 'void'
+            response      = p[6]
+        p[0] = Endpoint(p[2], payload, response, modifiers=chain(gen_annotations, gen_modifiers))
+
+    def p_service(p):
+        r"""service : annotation_array SERVICE NAME modifier_array LBRACKET service_content RBRACKET"""
+        gen_annotations = ((k ,v) for k, v in p[1].items())
+        gen_modifiers   = ((k ,v) for k, v in p[4].items())
+        p[0] = Service(p[3], methods=p[6], modifiers=chain(gen_annotations, gen_modifiers))
+
+    def p_service_content(p):
+        r"""service_content : service_content service_method
+                            | service_method"""
+        if len(p) == 3:
+            p[1].append(p[2])
+            p[0] = p[1]
+        else:
+            p[0] = [p[1]]
+
+    def p_service_method(p):
+        r"""service_method : annotation_array NAME LPAREN service_method_args RPAREN COLON full_qualified_name modifier_array
+                           | annotation_array NAME LPAREN service_method_args RPAREN COLON basetype modifier_array
+                           | annotation_array NAME LPAREN service_method_args RPAREN COLON VOID modifier_array
+                           | annotation_array NAME LPAREN RPAREN COLON full_qualified_name modifier_array
+                           | annotation_array NAME LPAREN RPAREN COLON basetype modifier_array
+                           | annotation_array NAME LPAREN RPAREN COLON VOID modifier_array"""
+        gen_annotations = ((k, v) for k, v in p[1].items())
+        if len(p) == 9:
+            attrs         = p[4]
+            outattr       = p[7]
+            gen_modifiers = ((k, v) for k, v in p[8].items())
+        else:
+            attrs         = 'void'
+            outattr       = p[6]
+            gen_modifiers = ((k, v) for k, v in p[7].items())
+        p[0] = ServiceMethod(p[2], attrs=attrs, response=outattr, modifiers=chain(gen_annotations, gen_modifiers))
+
+    def p_service_method_args(p):
+        r"""service_method_args : service_method_args COMMA full_qualified_name NAME
+                                | service_method_args COMMA basetype NAME
+                                | full_qualified_name NAME
+                                | basetype NAME"""
+        if len(p) == 5:
+            p[1].append((p[4], p[3]))
+            p[0] = p[1]
+        else:
+            p[0] = [(p[2], p[1])]
+
+    def p_modifier_array(p):
+        r"""modifier_array : modifier_array LINTERVAL NAME ASSIGN datatype RINTERVAL
+                           | modifier_array LINTERVAL NAME ASSIGN full_qualified_name RINTERVAL
+                           | modifier_array LINTERVAL NAME RINTERVAL
+                           | LINTERVAL NAME ASSIGN datatype RINTERVAL
+                           | LINTERVAL NAME ASSIGN full_qualified_name RINTERVAL
+                           | LINTERVAL NAME RINTERVAL
+                           | """
+
+        def add(key, value=True, collection=OrderedDict()):
+            if key in collection:
+                raise DuplicatedVariableException('Duplicated modifier: {0}'.format(key))
+            collection[key] = value
             return collection
 
-        if   len(p) == 9:
-            collection = add(p[1], range(p[4], p[6] + 1))
-        elif len(p) == 8:
-            collection = add(set(), range(p[3], p[5] + 1))
+        if len(p) == 7:
+            p[0] = add(p[3], value=p[5], collection=p[1])
         elif len(p) == 5:
-            collection = add(p[1], p[3])
+            p[0] = add(p[3], collection=p[1])
+        elif len(p) == 6:
+            p[0] = add(p[2], value=p[4])
+        elif len(p) == 4:
+            p[0] = add(p[2])
         else:
-            collection = add(set(), p[2])
-        __reservations = collection
-        p[0]           = collection
+            p[0] = OrderedDict()
 
-    def p_name_assignment(p):
-        r"""name_assignment : NAME ASSIGN concatenation"""
-        p[0] = (p[1], p[3])
+    def p_annotation_array(p):
+        r"""annotation_array : annotation_array AT NAME LPAREN datatype RPAREN
+                             | annotation_array AT NAME LPAREN full_qualified_name RPAREN
+                             | annotation_array AT NAME
+                             | AT NAME LPAREN datatype RPAREN
+                             | AT NAME LPAREN full_qualified_name RPAREN
+                             | AT NAME
+                             | """
 
-    def p_concatenation(p):
-        r"""concatenation : concatenation PLUS STRING_VALUE
-                          | concatenation PLUS FLOAT_VALUE
-                          | concatenation PLUS INTEGER_VALUE
-                          | concatenation PLUS BOOLEAN_VALUE
-                          | concatenation PLUS nested_value
-                          | STRING_VALUE
-                          | FLOAT_VALUE
-                          | INTEGER_VALUE
-                          | BOOLEAN_VALUE
-                          | nested_value"""
-        if len(p) == 4:
-            p[0] = p[1] + [p[3]]
-        else:
-            p[0] = p[1] if isinstance(p[1], (tuple, list)) else [p[1]]
-
-    def p_nested_value(p):
-        r"""nested_value : nested_value DOT NAME
-                         | NAME"""
-        p[0] = len(p) == 4 and p[1] + [p[3]] or [p[1]]
-
-    def p_id_collection(p):
-        r"""id_collection : id_collection COMMA id
-                          | id"""
-
-        def add(collection, _id):
-            if _id in collection:
-                raise Exception('[ID collection] Duplicated ID: {0}'.format(_id))
-            collection.add(_id)
+        def add(key, value=True, collection=OrderedDict()):
+            if key in collection:
+                raise DuplicatedVariableException('Duplicated annotation: {0}'.format(key))
+            collection[key] = value
             return collection
 
-        p[0] = add(p[1], p[3]) if len(p) == 4 else add(set(), p[1])
+        if len(p) == 7:
+            p[0] = add(p[3], value=p[5], collection=p[1])
+        elif len(p) == 4:
+            p[0] = add(p[3], collection=p[1])
+        elif len(p) == 6:
+            p[0] = add(p[2], value=p[4])
+        elif len(p) == 3:
+            p[0] = add(p[2])
+        else:
+            p[0] = OrderedDict()
+
+    def p_map(p):
+        r"""map : LBRACKET map_content RBRACKET"""
+        p[0] = Map(**p[2])
+
+    def p_map_content(p):
+        r"""map_content : map_content COMMA NAME COLON datatype
+                        | map_content COMMA NAME COLON full_qualified_name
+                        | map_content COMMA datatype COLON datatype
+                        | NAME COLON datatype
+                        | NAME COLON full_qualified_name
+                        | datatype COLON datatype"""
+
+        def add(key, value, collection=OrderedDict()):
+            if key in collection:
+                raise DuplicatedVariableException('Duplicated map key: {0}'.format(key))
+            collection[key] = value
+            return collection
+
+        if len(p) == 6:
+            p[0] = add(p[3], p[5], collection=p[1])
+        else:
+            p[0] = add(p[1], p[3])
+
+    def p_datatype(p):
+        r"""datatype : map
+                     | array
+                     | basetype"""
+        p[0] = p[1]
+
+    def p_array(p):
+        r"""array : LINTERVAL array_content RINTERVAL"""
+        p[0] = Array(*p[2])
+
+    def p_array_content(p):
+        r"""array_content : array_content COMMA datatype
+                          | array_content COMMA full_qualified_name
+                          | datatype
+                          | full_qualified_name"""
+
+        def add(value, collection=[]):
+            collection.append(value)
+            return collection
+
+        if len(p) == 4:
+            p[0] = add(p[3], collection=p[1])
+        else:
+            p[0] = add(p[1])
+
+    def p_basetype(p):
+        r"""basetype : DOUBLE
+                     | FLOAT
+                     | INT32
+                     | INT64
+                     | UINT32
+                     | UINT64
+                     | SINT32
+                     | SINT64
+                     | FIXED32
+                     | FIXED64
+                     | SFIXED32
+                     | SFIXED64
+                     | INT
+                     | LONG
+                     | DATE
+                     | TIMESTAMP
+                     | TIME
+                     | BOOL
+                     | STRING
+                     | BYTES"""
+        p[0] = p[1]
+
+    def p_full_qualified_name(p):
+        r"""full_qualified_name : full_qualified_name DOT NAME
+                                | NAME"""
+        if len(p) == 4:
+            p[1].append(p[3])
+            p[0] = p[1]
+        else:
+            p[0] = [p[1]]
 
     def p_id(p):
         r"""id : INTEGER_VALUE"""
@@ -579,233 +576,15 @@ def build_parser() -> yacc.LRParser:
     return yacc.yacc(optimize=OPTIMIZE, debug=DEBUG)
 
 
-def parse(_input):
-    if not isinstance(_input, str) and not (hasattr(_input, 'read') and callable(_input.read)):
-        raise TypeError("Expected input was string or a character input stream, got '{0}'".format(
-            type(_input).__name__)
-        )
+def build(modules: list, buildername: str, params=[]):
+    schema = Schema()
+    for module in modules:
+        schema.merge(module)
 
-    if isinstance(_input, str):
-        with open(_input, 'r') as fp:
-            _input = fp.read()
-    else:
-        _input = _input.read()
-
-    return build_parser().parse(_input)
-
-
-def build(modules, buildername, params=[]):
-    __fields = {}
-
-    def get_model(objects, modelname, path=[]):
-        if not isinstance(modelname, (str, list)):
-            raise TypeError("Expected 'modelname' was a string or a list, got: {0}".format(type(modelname).__name__))
-
-        if isinstance(modelname, str):
-            modelname = modelname.split('.')
-
-        if modelname[0] not in objects:
-            raise Exception("Unknown model: {0}".format('.'.join(path + [modelname[0]])))
-
-        if len(modelname) > 1:
-            return get_model(objects[modelname[0]]['objects'], modelname[1:], path='.'.join(path + [modelname[0]]))
-
-        if objects[modelname[0]]['type'] not in ('model', 'enum'):
-            raise Exception("Unknown model, got: {0} {1}".format(
-                objects[modelname[0]]['type'], '.'.join(path + [modelname[0]])))
-
-        return objects[modelname[0]]
-
-    def build_model_graph(environment):
-        nonlocal __fields
-
-        def build(reservations, objects, model, parent_model=None):
-            if model['type'] != 'model':
-                return
-
-            model['parent'] = parent_model
-
-            for field in model['fields'].values():
-
-                field['parent'] = model  # creates a backward reference (from field to its parent model)
-
-                _id = field['id']
-                if _id > 0:
-                    if _id in reservations:
-                        raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
-                            '.'.join(model['fullname']), field['name'], _id))
-                    if _id in __fields:
-                        raise Exception("ID already in use: {0}.{1} = {2}".format(
-                            '.'.join(model['fullname']), field['name'], _id))
-                    __fields[_id]  = field
-
-                    data_type = field['data_type']
-                    if isinstance(data_type, list) and len(data_type) == 1 and data_type[0] in environment['aliases']:
-                        field['data_type'] = environment['aliases'][data_type[0]]
-
-                    if not isinstance(field['data_type'], str):
-                        referenced_object = get_model(objects, field['data_type'])
-
-                        field['data_type'] = referenced_object
-
-                        if referenced_object['type'] == 'model':
-                            reverse_reference_name = '{0}_set'.format('__'.join(model['fullname'])).lower()
-                            if reverse_reference_name not in referenced_object['fields']:
-                                # creates a backward reference (from parent model to referenced model)
-                                referenced_object['fields'][reverse_reference_name] = make_model_field(
-                                    'repeated', model, reverse_reference_name, - field['id'], source_field=field)
-
-            for obj in model['objects'].values():
-                build(reservations, objects, obj, parent_model=model)
-
-        for obj in environment['objects'].values():
-            build(environment['reservations'], environment['objects'], obj)
-
-    def get_message(objects, messagename, path=[]):
-        if not isinstance(messagename, (str, list)):
-            raise TypeError("Expected 'messagename' was a string or a list, got: {0}".format(
-                type(messagename).__name__))
-
-        if isinstance(messagename, str):
-            messagename = messagename.split('.')
-
-        if messagename[0] not in objects:
-            raise Exception("Unknown message: {0}".format('.'.join(path + [messagename[0]])))
-
-        if len(messagename) > 1:
-            return get_message(
-                objects[messagename[0]]['objects'],
-                messagename[1:],
-                path='.'.join(path + [messagename[0]])
-            )
-
-        if objects[messagename[0]]['type'] not in ('message', 'enum'):
-            raise Exception("Unknown message, got: {0} {1}".format(
-                objects[messagename[0]]['type'], '.'.join(path + [messagename[0]])))
-
-        return objects[messagename[0]]
-
-    def build_message_graph(environment):
-        nonlocal __fields
-
-        def build(reservations, objects, message, parent_message=None):
-            if message['type'] != 'message':
-                return
-
-            message['parent'] = parent_message
-
-            for field in message['fields'].values():
-
-                field['parent'] = message
-
-                _id = field['id']
-                if _id is not None:
-                    if _id in reservations:
-                        raise Exception("A reserved ID was used: {0}.{1} = {2}".format(
-                            '.'.join(message['fullname']), field['name'], _id))
-                    if not isinstance(field['data_type'], str):
-                        raise Exception('Only raw types are allowed for mapping in a message: {0}.{1} = {2}'.format(
-                            '.'.join(message['fullname']), field['name'], _id))
-                    # existence of a mapping field is ignored
-                    # if _id not in __fields:
-                    #     raise Exception("Unknown mapping: {0}.{1} = {2}".format(
-                    #         '.'.join(message['fullname']), field['name'], _id))
-
-                    model_field = __fields.get(_id, None)  # mapped model field
-
-                    data_type = field['data_type']
-                    if isinstance(data_type, list) and len(data_type) == 1 and data_type[0] in environment['aliases']:
-                        field['data_type'] = environment['aliases'][data_type[0]]
-
-                    if field['data_type'] != model_field['data_type']:
-                        raise Exception('Mapping types mismatched: {0}.{1} = {2} -> {3}.{4} = {5}'.format(
-                            '.'.join(message['fullname']), field['name'], _id,
-                            '.'.join(model_field['model']['fullname']), model_field['name'], _id))
-
-                    # makes a connection between the message field and the mapped model field
-                    field['model_field'] = model_field
-
-                elif not isinstance(field['data_type'], str):
-                    referenced_object  = get_message(objects, field['data_type'])
-
-                    field['data_type'] = referenced_object
-
-                    # TODO aggiungere anche un riferimento reverso? -- Su questo riflettere io devo
-
-                elif field['data_type'] not in DATA_TYPES:
-                    raise UnknowDataTypeException('Unknown data type: {0}'.format(field['data_type']))
-
-                for obj in message['objects'].values():
-                    build(reservations, objects, obj, parent_message=message)
-
-        for obj in environment['objects'].values():
-            build(environment['reservations'], environment['objects'], obj)
-
-    def validate_endpoints(environment):
-
-        def get_message(path, object, type_, full_path=None):
-            if path == '':
-                return object
-            if path[0] in object['objects']:
-                obj = object['objects'][path[0]]
-                if obj['type'] != 'message':
-                    raise EndpointValidationException('Endpoint {0} type must be a message, got: {1}'.format(type_, obj['type']))
-                return get_message(path[1:], obj, type_, full_path=full_path)
-            raise EndpointValidationException('Cannot find {0} message: {1}'.format(type_, '.'.join(full_path)))
-
-        for endpoint in environment['endpoints'].values():
-            input_type  = endpoint['input_type']
-            if isinstance(input_type, str) and input_type != 'void' and input_type not in DATA_TYPES:
-                get_message(input_type, environment, type_='input', full_path=input_type)
-            return_type = endpoint['return_type']
-            if isinstance(return_type, str) and return_type != 'void' and return_type not in DATA_TYPES:
-                get_message(return_type, environment, type_='output', full_path=return_type)
-
-    if not hasattr(modules, '__iter__') or not callable(modules.__iter__):
-        raise TypeError('Expected "modules" was a collection of strings, got {0}'.format(type(modules).__name__))
-    if not isinstance(buildername, str):
-        raise TypeError('Builder must be the name of a builder, got {0}'.format(type(buildername).__name__))
-    if not hasattr(params, '__iter__') or not callable(params.__iter__):
-        raise TypeError('Expected "params" was a collection of strings, got {0}'.format(type(params).__name__))
-
-    schema = {
-        'reservations': set(),
-        'objects'     : OrderedDict(),
-        'aliases'     : {},
-        'vars'        : {},
-        'endpoints'   : {},
-    }
-
-    for modulename in modules:
-        module       = parse(modulename)
-
-        # merges the IDs set
-        intersection = module['reservations'].intersection(schema['reservations'])
-        if any(intersection):
-            raise Exception('[reservation] Duplicated IDs: {0}'.format(', '.join(str(_id) for _id in intersection)))
-        schema['reservations'].update(module['reservations'])
-
-        _module = module['module']
-
-        # merges aliases
-        intersection = set(_module['aliases'].keys()).intersection(schema['aliases'].keys())
-        if any(intersection):
-            raise Exception('[alias] Duplicated aliases: {0}'.format(', '.join(name for name in intersection)))
-        schema['aliases'].update(_module['aliases'])
-
-        # merges the modules
-        intersection = set(_module['objects'].keys()).intersection(set(schema['objects'].keys()))
-        if any(intersection):
-            raise Exception("Duplicated objects names: {0}".format(', '.join(intersection)))
-        schema['objects'].update(_module['objects'])
-
-        schema['vars'].update(_module['vars'])
-        schema['endpoints'].update(_module['endpoints'])
-
-    # builds models and messages graphs
-    build_model_graph(schema)
-    build_message_graph(schema)
-    validate_endpoints(schema)
+    schema.build_model_graph(modelcontainer=schema)
+    schema.build_message_graph(messagecontainer=schema)
+    schema.validate_services()
+    schema.validate_resources()
 
     # makes
     builder = importlib.import_module('builders.{0}'.format(buildername))
@@ -814,7 +593,7 @@ def build(modules, buildername, params=[]):
     builder.build(schema, **params)
 
 
-class UnknowDataTypeException(Exception):
+class UnknownDataTypeException(Exception):
     def __init__(self, *args, **kwargs):
         super().__init__(self, *args, **kwargs)
 
@@ -824,34 +603,144 @@ class EndpointValidationException(Exception):
         super().__init__(self, *args, **kwargs)
 
 
+class DuplicatedModifierException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedFieldException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedEnumChoiceException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedEnumException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedModelException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedMessageException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedEndpointException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedServiceMethodException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedVariableException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedAliasException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedResourceException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedServiceException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedReservationException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DuplicatedArgumentNameException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class ReservedIdInUseException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class IdAlreadyInUseException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DataStructNotFoundException(Exception):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class ModelNotFoundException(DataStructNotFoundException):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class MessageNotFoundException(DataStructNotFoundException):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class UnknownFieldMappingException(DataStructNotFoundException):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class DataTypeMismatchException(DataStructNotFoundException):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
+class FieldException(DataStructNotFoundException):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
+
+
 class ConfigStruct:
-    __slots__ = ('__builds',)
+    __slots__ = ('__builds', '__parser', '__modules')
 
     def __init__(self, config_filepath):
         if not isinstance(config_filepath, str):
             raise TypeError("Expected 'conf' was a string, got: {0}".format(type(config_filepath).__name__))
-
         with open(config_filepath, 'r') as fp:
             buff = json.load(fp)
-
-        self.__builds = {
+        self.__builds  = {
             builddef['builder']: builddef
                 for builddef in [
                     ConfigStruct.__validate_build(builddef.value)
                         for builddef in jsonpath_rw.parse('builds[*]').find(buff)
                 ]
         }
+        self.__parser  = build_parser()
+        self.__modules = {}
 
     @staticmethod
     def __validate_build(builddef):
-        schema = {
+        confdef = {
             'builder': {'type': 'string'},
             'params' : {'type': 'dict', 'keyschema': {'type': 'string'}},
             'enabled': {'type': 'boolean'},
             'modules': {'type': 'list', 'schema': {'type': 'string'}},
         }
 
-        validator = Validator(schema)
+        validator = Validator(confdef)
         if not validator.validate(builddef):
             raise SyntaxError("Invalid build definition: {0}".format(builddef))
         return builddef
@@ -860,30 +749,643 @@ class ConfigStruct:
     def builds(self):
         return (buildname for buildname in self.__builds)
 
-    def get_build(self, buildname):
-        return self.__builds[buildname]
+    def __parse(self, modulepath):
+        if modulepath in self.__modules:
+            return self.modules[modulepath]
+        with open(modulepath, 'r') as fp:
+            buff = fp.read()
+        module = self.__parser.parse(buff)
+        self.__modules[modulepath] = module
+        return module
 
-    def get_modules(self, buildname):
-        if buildname not in self.__builds:
-            return []
-        return self.__builds[buildname]['modules']
+    def build(self):
+        for buildername in self.builds:
+            buildattrs = self.__builds.get(buildername, None)
+            if buildattrs is not None and buildattrs.get('enabled', False) is True:
+                modules = set(self.__parse(modulepath) for modulepath in buildattrs['modules'])
+                build(modules, buildername, params=self.__builds[buildername]['params'])
 
-    def get_params(self, buildname):
-        if buildname not in self.__builds:
-            return []
-        return self.__builds[buildname]['params']
 
-    def build(self, buildname=None):
-        if not isinstance(buildname, str) and buildname is not None:
-            raise TypeError('Expected "buildname" was a string or None, got {0}'.format(type(buildname).__name__))
+class Map(OrderedDict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, args, kwargs)
 
-        if buildname is None:
-            for buildname in self.builds:
-                self.build(buildname=buildname)
+
+class Array(list):
+    def __init__(self, *args):
+        super().__init__(self, args)
+
+
+class Field:
+    __slots__ = ('__kind', '__datatype', '__name', '__id', 'modifiers', 'parent', '__mapped_model_field')
+
+    def __init__(self, name, id, datatype, kind, modifiers=None, parent=None):
+        self.__name               = name
+        self.__id                 = id
+        self.__datatype           = datatype
+        self.__kind               = kind
+        self.modifiers            = OrderedDict()
+        self.parent               = parent
+        self.__mapped_model_field = None
+
+        if modifiers is not None:
+            for k, v in modifiers:
+                if k in self.modifiers:
+                    raise DuplicatedVariableException('Duplicated modifiers: {0}'.format(k))
+                self.modifiers[k] = v
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def id(self):
+        return self.__id
+
+    @property
+    def datatype(self):
+        return self.__datatype
+
+    @datatype.setter
+    def datatype(self, datatype):
+        self.__datatype = datatype
+
+    @property
+    def kind(self):
+        return self.__kind
+
+    @property
+    def fullname(self):
+        return '.'.join(self.get_fullname())
+
+    @property
+    def model_field(self):
+        if isinstance(self.parent, Message):
+            return self.__mapped_model_field
+        return None
+
+    @model_field.setter
+    def model_field(self, field):
+        if isinstance(self.parent, Message) and isinstance(field.parent, Model):
+            self.__mapped_model_field = field
+
+    def get_fullname(self):
+        name = [self.name]
+        parent = self.parent
+        while parent is not None:
+            name.insert(0, parent.name)
+            parent = parent.parent
+        return name
+
+    def add_modifier(self, key, value=True):
+        if key in self.modifiers:
+            raise DuplicatedModifierException('Duplicated modifier name: {0}'.format(key))
+        self.modifiers[key] = value
+
+
+class Reservation(set):
+    def __init__(self, *args):
+        super().__init__(self, args)
+
+
+class Enum:
+    __slots__ = ('__name', 'choices', 'parent')
+
+    def __init__(self, name, choices=None, parent=None):
+        self.__name  = name
+        self.choices = OrderedDict()
+        self.parent  = parent
+
+        if choices is not None:
+            for k, v in choices.items():
+                self.add_choice(k, v)
+
+    @property
+    def name(self):
+        return self.__name
+
+    def add_choice(self, key, value=None):
+        if key in self.choices:
+            raise DuplicatedEnumChoiceException('Duplicated choice name: {0}'.format(key))
+        self.choices[key] = value if value is not None else len(self.choices)
+
+
+class Model:
+    __slots__ = ('__name', 'modifiers', 'fields', 'models', 'enums', 'parent')
+
+    def __init__(self, name, modifiers=None, fields=None, models=None, enums=None, parent=None):
+        # TODO maybe would be a great idea if the arguments will be validated before assignment
+        self.__name    = name
+        self.modifiers = OrderedDict()
+        self.fields    = OrderedDict()
+        self.models    = OrderedDict()
+        self.enums     = OrderedDict()
+        self.parent    = None
+
+        self.__load(modifiers, addfunc=self.add_modifier)
+        self.__load(fields, addfunc=self.add_field)
+        self.__load(models, addfunc=self.add_model)
+        self.__load(enums, addfunc=self.add_enum)
+
+    @staticmethod
+    def __load(args, addfunc):
+        if args is not None:
+            for arg in args:
+                addfunc(arg)
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def fullname(self):
+        return '.'.join(self.get_fullname())
+
+    def get_fullname(self):
+        name   = [self.name]
+        parent = self.parent
+        while parent is not None:
+            name.insert(0, parent.name)
+            parent = parent.parent
+        return name
+
+    def add_modifier(self, key, value=True):
+        if isinstance(key, tuple) and len(key) == 2:
+            value = key[1]
+            key   = key[0]
+        if key in self.modifiers:
+            raise DuplicatedModifierException('Duplicated modifier name: {0}'.format(key))
+        self.modifiers[key] = value
+
+    def add_field(self, field: Field) -> None:
+        if field.name in self.fields:
+            raise DuplicatedFieldException('Duplicated field name: {0}'.format(field.name))
+        field.parent = self
+        self.fields[field.name] = field
+
+    def add_model(self, model: 'Model') -> None:
+        if model.name in self.models:
+            raise DuplicatedModelException('Duplicated model name: {0}'.format(model.name))
+        model.parent = self
+        self.models[model.name] = model
+
+    def add_enum(self, enum: Enum) -> None:
+        if enum.name in self.enums:
+            raise DuplicatedEnumException('Duplicated enum name: {0}'.format(enum.name))
+        enum.parent = self
+        self.enums[enum.name] = enum
+
+
+class Message:
+    __slots__ = ('__name', 'modifiers', 'fields', 'messages', 'enums', 'parent')
+
+    def __init__(self, name, modifiers=None, fields=None, messages=None, enums=None, parent=None):
+        # TODO maybe would be a great idea if the arguments will be validated before assignment
+        self.__name    = name
+        self.modifiers = OrderedDict()
+        self.fields    = OrderedDict()
+        self.messages  = OrderedDict()
+        self.enums     = OrderedDict()
+        self.parent    = None
+
+        self.__load(modifiers, addfunc=self.add_modifier)
+        self.__load(fields, addfunc=self.add_field)
+        self.__load(messages, addfunc=self.add_message)
+        self.__load(enums, addfunc=self.add_enum)
+
+    @staticmethod
+    def __load(args, addfunc):
+        if args is not None:
+            for arg in args:
+                addfunc(arg)
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def fullname(self):
+        return '.'.join(self.get_fullname())
+
+    def get_fullname(self):
+        name = [self.name]
+        parent = self.parent
+        while parent is not None:
+            name.insert(0, parent.name)
+            parent = parent.parent
+        return name
+
+    def add_modifier(self, key, value=True):
+        if key in self.modifiers:
+            raise DuplicatedModifierException('Duplicated modifier name: {0}'.format(key))
+        self.modifiers[key] = value
+
+    def add_field(self, field: Field) -> None:
+        if field.name in self.fields:
+            raise DuplicatedFieldException('Duplicated field name: {0}'.format(field.name))
+        self.parent = self
+        self.fields[field.name] = field
+
+    def add_message(self, message: 'Message') -> None:
+        if message.name in self.messages:
+            raise DuplicatedMessageException('Duplicated message name: {0}'.format(message.name))
+        self.parent = self
+        self.messages[message.name] = message
+
+    def add_enum(self, enum: Enum) -> None:
+        if enum.name in self.enums:
+            raise DuplicatedEnumException('Duplicated enum name: {0}'.format(enum.name))
+        self.parent = self
+        self.enums[enum.name] = enum
+
+
+class Endpoint:
+    __slots__ = ('__name', 'payload', 'response', 'modifiers', 'resource')
+
+    def __init__(self, name, payload, response, modifiers=None, resource=None):
+        self.__name     = name
+        self.payload  = payload
+        self.response = response
+        self.modifiers  = OrderedDict()
+        self.resource   = resource
+
+        if modifiers is not None:
+            for k, v in modifiers:
+                if k in self.modifiers:
+                    raise DuplicatedVariableException('Duplicated modifiers: {0}'.format(k))
+                self.modifiers[k] = v
+
+    @property
+    def name(self):
+        return self.__name
+
+    def add_modifier(self, key, value=True):
+        if key in self.modifiers:
+            raise DuplicatedModifierException('Duplicated modifier name: {0}'.format(key))
+        self.modifiers[key] = value
+
+    def __str__(self):
+        return '{0}.{1}'.format(self.resource.name, self.name)
+
+
+class Resource:
+    __slots__ = ('__name', 'modifiers', 'endpoints')
+
+    def __init__(self, name, endpoints=None, modifiers=None):
+        self.__name    = name
+        self.modifiers = OrderedDict()
+        self.endpoints = OrderedDict()
+
+        if modifiers is not None:
+            for k, v in modifiers:
+                if k in self.modifiers:
+                    raise DuplicatedVariableException('Duplicated modifiers: {0}'.format(k))
+                self.modifiers[k] = v
+
+        if endpoints is not None:
+            for endpoint in endpoints:
+                if endpoint.name in self.endpoints:
+                    raise DuplicatedEndpointException('Duplicated endpoint: {0}'.format(endpoint.name))
+                self.add_endpoint(endpoint)
+
+    @property
+    def name(self):
+        return self.__name
+
+    def add_modifier(self, key, value=True):
+        if key in self.modifiers:
+            raise DuplicatedModifierException('Duplicated modifier name: {0}'.format(key))
+        self.modifiers[key] = value
+
+    def add_endpoint(self, endpoint: Endpoint):
+        if endpoint.name in self.endpoints:
+            raise DuplicatedEndpointException('Duplicated endpoint name: {0}'.format(endpoint.name))
+        endpoint.resource = self
+        self.endpoints[endpoint.name] = endpoint
+
+
+class ServiceMethod:
+    __slots__ = ('__name', 'attrs', 'response', 'modifiers', 'service')
+
+    def __init__(self, name, attrs=None, response=None, modifiers=None, service=None):
+        self.__name    = name
+        self.attrs     = OrderedDict()
+        self.response  = response
+        self.modifiers = OrderedDict()
+        self.service   = service
+
+        for k, v in attrs.items():
+            if k in self.attrs:
+                raise DuplicatedArgumentNameException('Duplicated argument name: {0}'.format(k))
+            self.attrs[k] = v
+
+        if modifiers is not None:
+            for k, v in modifiers:
+                if k in self.modifiers:
+                    raise DuplicatedVariableException('Duplicated modifiers: {0}'.format(k))
+                self.modifiers[k] = v
+
+    @property
+    def name(self):
+        return self.__name
+
+    def add_modifier(self, key, value=True):
+        if key in self.modifiers:
+            raise DuplicatedModifierException(
+                'Duplicated modifier name: {0}'.format(key))
+        self.modifiers[key] = value
+
+
+class Service:
+    __slots__ = ('__name', 'methods', 'modifiers')
+
+    def __init__(self, name, methods=None, modifiers=None):
+        self.__name    = name
+        self.methods   = OrderedDict()
+        self.modifiers = OrderedDict()
+
+        if modifiers is not None:
+            for k, v in modifiers:
+                if k in self.modifiers:
+                    raise DuplicatedVariableException('Duplicated modifiers: {0}'.format(k))
+                self.modifiers[k] = v
+
+        if methods is not None:
+            for method in methods:
+                if method.name in self.methods:
+                    raise DuplicatedServiceMethodException('Duplicated service method: {0}'.format(method.name))
+                self.methods[method.name] = method
+
+    @property
+    def name(self):
+        return self.__name
+
+    def add_modifier(self, key, value=True):
+        if key in self.modifiers:
+            raise DuplicatedModifierException('Duplicated modifier name: {0}'.format(key))
+        self.modifiers[key] = value
+
+    def add_method(self, method):
+        if method.name in self.methods:
+            raise DuplicatedServiceMethodException('Duplicated service method name: {0}'.format(method.name))
+        method.service = self
+        self.methods[method.name] = method
+
+
+class Variable:
+    __slots__ = ('__name', '__value')
+
+    def __init__(self, name, value):
+        self.__name  = name
+        self.__value = value
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def value(self):
+        return self.__value
+
+
+class Alias:
+    __slots__ = ('__name', '__value')
+
+    def __init__(self, name, value):
+        self.__name  = name
+        self.__value = value
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def value(self):
+        return self.__value
+
+
+class Schema:
+    __slots__ = ('__variables', '__aliases', '__models', '__messages', '__resources', '__services', '__reservations', '__mapped_fields')
+
+    def __init__(self, variables=[], aliases=[], models=[], messages=[], resources=[], services=[], reservations=set()):
+        self.__variables     = OrderedDict()
+        self.__aliases       = OrderedDict()
+        self.__models        = OrderedDict()
+        self.__messages      = OrderedDict()
+        self.__resources     = OrderedDict()
+        self.__services      = OrderedDict()
+        self.__reservations  = set()
+        self.__mapped_fields = {}
+
+        for arg in chain(variables, aliases, models, messages, resources, services, reservations):
+            self.add(arg)
+
+    def __collections(self):
+        return {
+            Variable   : self.__variables,
+            Alias      : self.__aliases,
+            Model      : self.__models,
+            Message    : self.__messages,
+            Resource   : self.__resources,
+            Service    : self.__services,
+            Reservation: self.__reservations,
+        }
+
+    def __collections_exceptions(self, name):
+        return {
+            Variable   : lambda: DuplicatedVariableException('Duplicated variable {0}'.format(name)),
+            Alias      : lambda: DuplicatedAliasException('Duplicated alias {0}'.format(name)),
+            Model      : lambda: DuplicatedModelException('Duplicated model {0}'.format(name)),
+            Message    : lambda: DuplicatedMessageException('Duplicated message {0}'.format(name)),
+            Resource   : lambda: DuplicatedResourceException('Duplicated resource {0}'.format(name)),
+            Service    : lambda: DuplicatedServiceException('Duplicated service {0}'.format(name)),
+            Reservation: lambda: DuplicatedReservationException('Duplicates reservation: {0}'.format(name)),
+        }
+
+    @property
+    def fullname(self):
+        return 'Schema'
+
+    @property
+    def variables(self):
+        return self.__variables
+
+    @property
+    def aliases(self):
+        return self.__aliases
+
+    @property
+    def models(self):
+        return self.__models
+
+    @property
+    def messages(self):
+        return self.__messages
+
+    @property
+    def resources(self):
+        return self.__resources
+
+    @property
+    def services(self):
+        return self.__services
+
+    @property
+    def reservations(self):
+        return self.__reservations
+
+    def add(self, arg):
+        collections = self.__collections()
+        collection = collections[type(arg)]
+        if type(arg) is Reservation:
+            collection.add(arg)
         else:
-            attrs = self.get_build(buildname)
-            if attrs.get('enabled', False) is True:
-                build(self.get_modules(buildname), buildname, self.get_params(buildname))
+            for _collection in collections.values():
+                if arg.name in _collection:
+                    raise self.__collections_exceptions(arg.name)[type(arg)]
+            collection[arg.name] = arg
+
+    def merge(self, schema: 'Schema') -> None:
+        for collection in schema.__collections().values():
+            for item in collection.values():
+                self.add(item)
+
+    def build_model_graph(self, modelcontainer):
+
+        def finddatastruct(fullname: list, datastruct, index=0):
+            if len(fullname) > index + 1:
+                if not isinstance(datastruct, (Schema, Model)):
+                    raise Exception('Data struct is neither a schema nor a model: {0}'.format(datastruct.fullname))
+                if fullname[index] not in datastruct.models and fullname[index] not in datastruct.enums:
+                    raise DataStructNotFoundException('Data struct not found: {0}'.format(fullname))
+                subdatastruct = datastruct.models[fullname[index]] if fullname[index] in datastruct.models else datastruct.enums[fullname[index]]
+                return finddatastruct(fullname, subdatastruct, index=index + 1)
+            return datastruct
+
+        for model in modelcontainer.models.values():
+            for field in model.fields.values():
+                if field.id > 0:
+                    if field.id in self.reservations:
+                        raise ReservedIdInUseException("A reserved ID was used: {0} = {1}".format(field.fullname, field.id))
+                    if field.id in self.__mapped_fields:
+                        raise IdAlreadyInUseException("ID already in use: {0} = {1}".format(field.fullname, field.id))
+                    self.__mapped_fields[field.id] = field
+
+                    if field.datatype in self.aliases:
+                        field.datatype = self.aliases[field.datatype].value
+
+                    if isinstance(field.datatype, list) and len(field.datatype) == 1 and field.datatype[0] in self.aliases:
+                        field.datatype = self.aliases[field.datatype[0]]
+
+                    if not isinstance(field.datatype, str):
+                        refdatastruct = finddatastruct(field.datatype, self)
+                        field.datatype = refdatastruct
+                        reverse_reference_field = Field('{0}_set'.format(model.fullname.lower()), - field.id, field.parent, 'repeated', parent=refdatastruct)
+                        refdatastruct.add_field(reverse_reference_field)
+
+                    self.build_model_graph(modelcontainer=model)
+
+    def build_message_graph(self, messagecontainer):
+
+        def finddatastruct(fullname: list, datastruct, index=0):
+            if len(fullname) > index + 1:
+                if not isinstance(datastruct, (Schema, Message)):
+                    raise Exception('Data struct is neither a schema nor a message: {0}'.format(datastruct.fullname))
+                if fullname[index] not in datastruct.messages and fullname[index] not in datastruct.enums:
+                    raise DataStructNotFoundException('Data struct not found: {0}'.format(fullname))
+                subdatastruct = datastruct.messages[fullname[index]] if fullname[index] in datastruct.messages else datastruct.enums[fullname[index]]
+                return finddatastruct(fullname, subdatastruct, index=index + 1)
+            return datastruct
+
+        for message in messagecontainer.messages.values():
+            for field in message.fields.values():
+
+                if field.datatype in self.aliases:
+                    field.datatype = self.aliases[field.datatype].value
+
+                if field.id is not None:
+                    if isinstance(field.datatype, str):  # mapped raw type field
+                        if field.id not in self.__mapped_fields:
+                            raise UnknownFieldMappingException('Unknown field mapping: {0} = {1}'.format(field.fullname, field.id))
+                        if field.datatype not in DATA_TYPES:
+                            raise UnknownDataTypeException('Unknown data type: {0} [{1}]'.format(field.datatype, field.fullname))
+                        mapped_model_field = self.__mapped_fields[field.id]
+                        if field.datatype != mapped_model_field.datatype:
+                            raise DataTypeMismatchException('Data type mismatch: {0} -> {1} = {2}'.format(field.fullname, mapped_model_field.fullname, field.id))
+                        field.model_field(mapped_model_field)
+                    else:  # mapped message or enum field (not permitted)
+                        raise TypeError('Within a message only raw type fields can be mapped: {0}'.format(field.fullname))
+                elif field.id <= 0:
+                    raise FieldException('Only explicitly defined fields could be used for mapping: {0} = {1}'.format(field.fullname, field.id))
+                else:
+                    if isinstance(field.datatype, str):  # unmapped raw type field
+                        if field.datatype not in DATA_TYPES:
+                            raise UnknownDataTypeException('Unknown data type: {0} [{1}]'.format(field.datatype, field.fullname))
+                    else:  # unmapped message or enum field
+                        refdatastruct = finddatastruct(field.datatype, self)
+                        field.datatype = refdatastruct
+                        # creates a backward reference from the destination message to the field message (the origin)
+                        # not sure if it's a good idea...
+                        # reverse_reference_field = Field('{0}_set'.format(message.fullname.lower()), None, field.parent, 'repeated', parent=refdatastruct)
+                        # refdatastruct.add_message(reverse_reference_field)
+
+                self.build_message_graph(messagecontainer=message)
+
+    def validate_resources(self):
+
+        def findmessage(fullname: list, datastruct=self, index=0) -> Message:
+            if len(fullname) > index + 1:
+                if not isinstance(datastruct, (Schema, Message)):
+                    raise Exception('Data struct is neither a schema nor a message: {0}'.format(datastruct.fullname))
+                if fullname[index] not in datastruct.messages:
+                    raise DataStructNotFoundException('Unknown message: {0}'.format('.'.join(fullname)))
+                return findmessage(fullname, datastruct=datastruct.messages[fullname[index]], index=index + 1)
+            return datastruct
+
+        def checkdatatype(value, endpoint):
+            if isinstance(value, str):
+                if value not in DATA_TYPES and value != 'void':
+                    raise UnknownDataTypeException('Unknown data type: {0} [{1}]'.format(value, endpoint.fullname))
+                return value
+            elif isinstance(value, list):
+                return findmessage(value, datastruct=self)
+            else:
+                raise NotImplemented('Unknown datatype: {0} [{1}]'.format(value, endpoint.fullname))
+
+        for resource in self.resources.values():
+            for endpoint in resource.endpoints.values():
+                endpoint.payload  = checkdatatype(endpoint.payload, endpoint)
+                endpoint.response = checkdatatype(endpoint.response, endpoint)
+
+    def validate_services(self):
+
+        def finddatastruct(fullname: str, datastruct=self, index=0):
+            if len(fullname) > index + 1:
+                if not isinstance(datastruct, (Schema, Model, Message)):
+                    raise Exception('Data struct is neither a schema nor a model nor a message: {0}'.format(datastruct.fullname))
+                if fullname[index] in datastruct.models:
+                    return finddatastruct(fullname, datastruct=datastruct.models[fullname[index]], index=index + 1)
+                elif fullname[index] in datastruct.messages:
+                    return finddatastruct(fullname, datastruct=datastruct.messages[fullname[index]], index=index + 1)
+                else:
+                    raise DataStructNotFoundException('Unknown datastruct: {0}'.format('.'.join(fullname)))
+            return datastruct
+
+        def checkdatatype(value, method):
+            if isinstance(value, str):
+                if value not in DATA_TYPES and value != 'void':
+                    raise UnknownDataTypeException('Unknown data type: {0} [{1}]'.format(value, method))
+                return value
+            elif isinstance(value, list):
+                return finddatastruct(value, datastruct=self)
+            else:
+                raise NotImplemented('Unknown service datatype: {0} [{1}.{2}]'.format(datatype, method.service.name, method.name))
+
+        for service in self.services.values():
+            for method in service.methods.values():
+                method.response = checkdatatype(method.response, method)
+                for argname, datatype in method.attrs.items():
+                    method.attrs[argname] = checkdatatype(datatype, method)
 
 
 def cli(*args, **kwargs):
