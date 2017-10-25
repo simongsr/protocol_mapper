@@ -6,6 +6,7 @@ import jinja2
 from filters import core
 from filters import python
 from filters import sqlalchemy
+from filters.sqlalchemy import Field
 
 __author__  = 'Simone Pandolfi'
 __email__   = '<simopandolfi@gmail.com>'
@@ -28,7 +29,14 @@ __ENVIRONMENT.filters.update(sqlalchemy.FILTERS)
 
 def build(schema, **kwargs):
     __create_outdir_if_not_exists(**kwargs)
-    build_models(schema, **kwargs)
+    # print('QUI')
+    # print(schema.models)
+    # for m in schema.models.values():
+    #     print(m)
+    #     for f in m.fields.values():
+    #         field = Field(f)
+    #         print(f.fullname, field.fullname)
+    # build_models(schema, **kwargs)
     # build_enums(schema, **kwargs)
     # build_messages(schema, **kwargs)
 

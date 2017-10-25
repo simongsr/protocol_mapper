@@ -1247,13 +1247,13 @@ class Schema:
 
     def merge(self, schema: 'Schema') -> None:
         for collection in schema.__collections().values():
-            for item in collection.values():
+            for item in (collection.values() if isinstance(collection, dict) else collection):
                 self.add(item)
 
     def build_model_graph(self, modelcontainer):
 
         def finddatastruct(fullname: list, datastruct, index=0):
-            if len(fullname) > index + 1:
+            if len(fullname) > index:
                 if not isinstance(datastruct, (Schema, Model)):
                     raise Exception('Data struct is neither a schema nor a model: {0}'.format(datastruct.fullname))
                 if fullname[index] not in datastruct.models and fullname[index] not in datastruct.enums:
@@ -1271,7 +1271,7 @@ class Schema:
                         raise IdAlreadyInUseException("ID already in use: {0} = {1}".format(field.fullname, field.id))
                     self.__mapped_fields[field.id] = field
 
-                    if field.datatype in self.aliases:
+                    if '.'.join(field.datatype) in self.aliases:
                         field.datatype = self.aliases[field.datatype].value
 
                     if isinstance(field.datatype, list) and len(field.datatype) == 1 and field.datatype[0] in self.aliases:
@@ -1288,7 +1288,7 @@ class Schema:
     def build_message_graph(self, messagecontainer):
 
         def finddatastruct(fullname: list, datastruct, index=0):
-            if len(fullname) > index + 1:
+            if len(fullname) > index:
                 if not isinstance(datastruct, (Schema, Message)):
                     raise Exception('Data struct is neither a schema nor a message: {0}'.format(datastruct.fullname))
                 if fullname[index] not in datastruct.messages and fullname[index] not in datastruct.enums:
@@ -1334,7 +1334,7 @@ class Schema:
     def validate_resources(self):
 
         def findmessage(fullname: list, datastruct=self, index=0) -> Message:
-            if len(fullname) > index + 1:
+            if len(fullname) > index:
                 if not isinstance(datastruct, (Schema, Message)):
                     raise Exception('Data struct is neither a schema nor a message: {0}'.format(datastruct.fullname))
                 if fullname[index] not in datastruct.messages:
@@ -1360,7 +1360,7 @@ class Schema:
     def validate_services(self):
 
         def finddatastruct(fullname: str, datastruct=self, index=0):
-            if len(fullname) > index + 1:
+            if len(fullname) > index:
                 if not isinstance(datastruct, (Schema, Model, Message)):
                     raise Exception('Data struct is neither a schema nor a model nor a message: {0}'.format(datastruct.fullname))
                 if fullname[index] in datastruct.models:

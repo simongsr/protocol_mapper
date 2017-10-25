@@ -1,8 +1,10 @@
+import inspect
 from collections import OrderedDict
 
 import itertools
 
 from filters import core
+from main import Field
 
 __author__  = 'Simone Pandolfi'
 __email__   = '<simopandolfi@gmail.com>'
@@ -15,6 +17,15 @@ BUILDER_PREFIX = BUILDER_NAME + '__'
 MODIFIERS      = {
     'backref': 'backref',
 }
+
+
+class Field:
+    __slots__ = ('__fields', )
+
+    def __init__(self, field: Field):
+        self.__field = field
+        for name, func in ((n, f) for n, f in inspect.getmembers(field, predicate=inspect.ismethod) if not n.startswith('_')):
+            setattr(self, name, lambda: func())
 
 
 def modelname(model):
