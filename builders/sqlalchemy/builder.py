@@ -31,11 +31,11 @@ def build(schema, **kwargs):
     __create_outdir_if_not_exists(**kwargs)
     # print('QUI')
     # print(schema.models)
-    # for m in schema.models.values():
-    #     print(m)
-    #     for f in m.fields.values():
-    #         field = Field(f)
-    #         print(f.fullname, field.fullname)
+    for m in schema.models.values():
+        # print(m)
+        for f in m.fields.values():
+            field = Field(f)
+            # print(f.fullname, field.fullname)
     # build_models(schema, **kwargs)
     # build_enums(schema, **kwargs)
     # build_messages(schema, **kwargs)

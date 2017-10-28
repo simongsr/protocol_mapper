@@ -435,10 +435,10 @@ def build_parser() -> yacc.LRParser:
             p[0] = [(p[2], p[1])]
 
     def p_modifier_array(p):
-        r"""modifier_array : modifier_array LINTERVAL NAME ASSIGN datatype RINTERVAL
+        r"""modifier_array : modifier_array LINTERVAL NAME ASSIGN basetypevalue RINTERVAL
                            | modifier_array LINTERVAL NAME ASSIGN full_qualified_name RINTERVAL
                            | modifier_array LINTERVAL NAME RINTERVAL
-                           | LINTERVAL NAME ASSIGN datatype RINTERVAL
+                           | LINTERVAL NAME ASSIGN basetypevalue RINTERVAL
                            | LINTERVAL NAME ASSIGN full_qualified_name RINTERVAL
                            | LINTERVAL NAME RINTERVAL
                            | """
@@ -461,10 +461,10 @@ def build_parser() -> yacc.LRParser:
             p[0] = OrderedDict()
 
     def p_annotation_array(p):
-        r"""annotation_array : annotation_array AT NAME LPAREN datatype RPAREN
+        r"""annotation_array : annotation_array AT NAME LPAREN basetypevalue RPAREN
                              | annotation_array AT NAME LPAREN full_qualified_name RPAREN
                              | annotation_array AT NAME
-                             | AT NAME LPAREN datatype RPAREN
+                             | AT NAME LPAREN basetypevalue RPAREN
                              | AT NAME LPAREN full_qualified_name RPAREN
                              | AT NAME
                              | """
@@ -491,12 +491,12 @@ def build_parser() -> yacc.LRParser:
         p[0] = Map(**p[2])
 
     def p_map_content(p):
-        r"""map_content : map_content COMMA NAME COLON datatype
+        r"""map_content : map_content COMMA NAME COLON basetypevalue
                         | map_content COMMA NAME COLON full_qualified_name
-                        | map_content COMMA datatype COLON datatype
-                        | NAME COLON datatype
+                        | map_content COMMA basetypevalue COLON basetypevalue
+                        | NAME COLON basetypevalue
                         | NAME COLON full_qualified_name
-                        | datatype COLON datatype"""
+                        | basetypevalue COLON basetypevalue"""
 
         def add(key, value, collection=OrderedDict()):
             if key in collection:
@@ -512,7 +512,7 @@ def build_parser() -> yacc.LRParser:
     def p_datatype(p):
         r"""datatype : map
                      | array
-                     | basetype"""
+                     | basetypevalue"""
         p[0] = p[1]
 
     def p_array(p):
@@ -522,7 +522,7 @@ def build_parser() -> yacc.LRParser:
     def p_array_content(p):
         r"""array_content : array_content COMMA datatype
                           | array_content COMMA full_qualified_name
-                          | datatype
+                          | basetypevalue
                           | full_qualified_name"""
 
         def add(value, collection=[]):
@@ -555,6 +555,13 @@ def build_parser() -> yacc.LRParser:
                      | BOOL
                      | STRING
                      | BYTES"""
+        p[0] = p[1]
+
+    def p_basetypevalue(p):
+        r"""basetypevalue : FLOAT_VALUE
+                          | INTEGER_VALUE
+                          | BOOLEAN_VALUE
+                          | STRING_VALUE"""
         p[0] = p[1]
 
     def p_full_qualified_name(p):
@@ -1280,7 +1287,8 @@ class Schema:
                     if not isinstance(field.datatype, str):
                         refdatastruct = finddatastruct(field.datatype, self)
                         field.datatype = refdatastruct
-                        reverse_reference_field = Field('{0}_set'.format(model.fullname.lower()), - field.id, field.parent, 'repeated', parent=refdatastruct)
+                        backref_name = field.modifiers['backref'] if 'backref' in field.modifiers else '{0}_set'.format(model.fullname.lower())
+                        reverse_reference_field = Field(backref_name, - field.id, field.parent, 'repeated', parent=refdatastruct)
                         refdatastruct.add_field(reverse_reference_field)
 
                     self.build_model_graph(modelcontainer=model)

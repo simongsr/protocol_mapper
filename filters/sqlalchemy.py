@@ -20,11 +20,12 @@ MODIFIERS      = {
 
 
 class Field:
-    __slots__ = ('__fields', )
+    __slots__ = ('__field', )
 
     def __init__(self, field: Field):
         self.__field = field
         for name, func in ((n, f) for n, f in inspect.getmembers(field, predicate=inspect.ismethod) if not n.startswith('_')):
+            print(name, func)
             setattr(self, name, lambda: func())
 
 
