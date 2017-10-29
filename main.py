@@ -942,6 +942,15 @@ class Model:
         enum.parent = self
         self.enums[enum.name] = enum
 
+    def visit_models(self, parentbefore=False):
+        for model in self.models.values():
+            if parentbefore:
+                yield model
+                yield from model.visit_models(parentbefore=parentbefore)
+            else:
+                yield from model.visit_models(parentbefore=parentbefore)
+                yield model
+
 
 class Message:
     __slots__ = ('__name', 'modifiers', 'fields', 'messages', 'enums', 'parent')
@@ -1251,6 +1260,15 @@ class Schema:
                 if arg.name in _collection:
                     raise self.__collections_exceptions(arg.name)[type(arg)]
             collection[arg.name] = arg
+
+    def visit_models(self, parentbefore=False):
+        for model in self.models.values():
+            if parentbefore:
+                yield model
+                yield from model.visit_models(parentbefore=parentbefore)
+            else:
+                yield from model.visit_models(parentbefore=parentbefore)
+                yield model
 
     def merge(self, schema: 'Schema') -> None:
         for collection in schema.__collections().values():
