@@ -3,7 +3,7 @@ import os
 
 import jinja2
 
-# from filters import core
+from filters import core
 # from filters import python
 from filters import sqlalchemy
 
@@ -15,7 +15,7 @@ __version__ = (0, 0, 1)
 __TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'templates')
 __ENVIRONMENT   = jinja2.Environment(
     loader=jinja2.FileSystemLoader(__TEMPLATES_DIR), trim_blocks=True, lstrip_blocks=True)
-# __ENVIRONMENT.filters.update(core.FILTERS)
+__ENVIRONMENT.filters.update(core.FILTERS)
 # __ENVIRONMENT.filters.update(python.FILTERS)
 __ENVIRONMENT.filters.update(sqlalchemy.FILTERS)
 

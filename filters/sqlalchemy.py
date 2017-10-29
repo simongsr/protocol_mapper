@@ -3,6 +3,7 @@ from collections import OrderedDict
 import itertools
 
 from filters import core
+from main import Field, Model
 
 __author__  = 'Simone Pandolfi'
 __email__   = '<simopandolfi@gmail.com>'
@@ -21,7 +22,7 @@ def modelname(model):
     return '__'.join(model['fullname'])
 
 
-def datatype(field):
+def datatype(field: Field) -> str:
     DATA_TYPES = {
         'double'   : 'Float',
         'float'    : 'Float',
@@ -44,9 +45,9 @@ def datatype(field):
         'string'   : 'String',
         'bytes'    : 'LargeBinary',
     }
-    datatype_ = field['data_type']
-    if isinstance(datatype_, dict) and datatype_['type'] == 'model':
-        return "'" + '__'.join(datatype_['fullname']) + "'"
+    datatype_ = field.datatype
+    if isinstance(datatype_, Model):
+        return "'" + '__'.join(datatype_.get_fullname()) + "'"
     if isinstance(datatype_, str) and datatype_ in DATA_TYPES:
         return DATA_TYPES[datatype_]
     raise TypeError('Unknown data type: {0}'.format(datatype_))

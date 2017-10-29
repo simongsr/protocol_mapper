@@ -18,8 +18,8 @@ class {{ model.name }}(Base):
     __tablename__ = '{{ model.name }}'
 
     {% for fieldname, field in model.fields.items() %}
-        {% if field.kind != 'repeated' %}
-    {{ fieldname }} = Column()
+        {% if field.kind in ('required', 'optional') %}
+    {{ fieldname }} = Column({{ field|sqlalchemy.datatype }})
         {% else %}
     {{fieldname}} = relationship()
         {% endif %}

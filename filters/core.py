@@ -3,7 +3,7 @@ from collections import OrderedDict
 
 import re
 
-from main import DATA_TYPES
+from main import DATA_TYPES, Field
 
 __author__  = 'Simone Pandolfi'
 __email__   = '<simopandolfi@gmail.com>'
@@ -166,12 +166,12 @@ def endpoints(schema):
     return (obj for obj in schema['endpoints'].values() if obj['type'] == 'endpoint')
 
 
-def is_raw_type(field):
-    if not isinstance(field, dict) or field['type'] != 'field':
+def is_raw_type(field: Field) -> bool:
+    if not isinstance(field, Field):
         raise TypeError('Expected a field object, got: {0}'.format(field))
-    if not isinstance(field['data_type'], str):
+    if not isinstance(field.datatype, str):
         return False
-    return field['data_type'] in DATA_TYPES
+    return field.datatype in DATA_TYPES
 
 
 def key_fields(model):

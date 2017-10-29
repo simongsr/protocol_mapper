@@ -3,7 +3,6 @@ import importlib
 import json
 import os
 import re
-import sys
 from collections import OrderedDict
 from datetime import date, datetime
 from functools import reduce
@@ -907,10 +906,10 @@ class Model:
         return self.__name
 
     @property
-    def fullname(self):
+    def fullname(self) -> str:
         return '.'.join(self.get_fullname())
 
-    def get_fullname(self):
+    def get_fullname(self) -> list:
         name   = [self.name]
         parent = self.parent
         while parent is not None:
@@ -1428,10 +1427,10 @@ def cli(*args, **kwargs):
     config.build()
 
 
-if __name__ == '__main__':
-    t1 = datetime.now()
-
-    cli(*sys.argv[1:])
-
-    t2 = datetime.now()
-    print('{0}Benchmark: {1}\n'.format('\n' * 5, t2 - t1))
+# if __name__ == '__main__':
+#     t1 = datetime.now()
+#
+#     cli(*sys.argv[1:])
+#
+#     t2 = datetime.now()
+#     print('{0}Benchmark: {1}\n'.format('\n' * 5, t2 - t1))
