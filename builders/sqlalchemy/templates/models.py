@@ -14,6 +14,17 @@ __version__ = {{ version }}
 """
 
 {% for model in schema.visit_models() %}
-    {{ model.name }}
+class {{ model.name }}(Base):
+    __tablename__ = '{{ model.name }}'
+
+    {% for fieldname, field in model.fields.items() %}
+        {% if field.kind != 'repeated' %}
+    {{ fieldname }} = Column()
+        {% else %}
+    {{fieldname}} = relationship()
+        {% endif %}
+    {% endfor %}
+
+
 {% endfor %}
 

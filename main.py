@@ -2,9 +2,11 @@
 import importlib
 import json
 import os
+import re
 import sys
 from collections import OrderedDict
 from datetime import date, datetime
+from functools import reduce
 from itertools import chain
 
 import jsonpath_rw
@@ -308,7 +310,7 @@ def build_parser() -> yacc.LRParser:
                         | annotation_array REPEATED basetype NAME ASSIGN id modifier_array"""
         annotation_gen = ((k, v) for k, v in p[1].items())
         modifiers_gen  = ((k, v) for k, v in p[7].items())
-        p[0] = Field(p[4], p[6], p[3], p[1], modifiers=chain(annotation_gen, modifiers_gen))
+        p[0] = Field(p[4], p[6], p[3], p[2], modifiers=chain(annotation_gen, modifiers_gen))
 
     def p_message(p):
         r"""message : annotation_array MESSAGE NAME modifier_array LBRACKET message_content RBRACKET"""
@@ -1305,7 +1307,7 @@ class Schema:
                     if not isinstance(field.datatype, str):
                         refdatastruct = finddatastruct(field.datatype, self)
                         field.datatype = refdatastruct
-                        backref_name = field.modifiers['backref'] if 'backref' in field.modifiers else '{0}_set'.format(model.fullname.lower())
+                        backref_name = reduce(lambda a, b: b if len(a) == 0 else a, (x if x is not None else '' for x in list(re.match(r'"(.*?)"|\'(.*?)\'', field.modifiers.get('backref', '""')).groups()) + ['{0}_set'.format(model.fullname.lower())]))
                         reverse_reference_field = Field(backref_name, - field.id, field.parent, 'repeated', parent=refdatastruct)
                         refdatastruct.add_field(reverse_reference_field)
 
