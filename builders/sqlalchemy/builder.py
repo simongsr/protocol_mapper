@@ -6,7 +6,6 @@ import jinja2
 from filters import core
 from filters import python
 from filters import sqlalchemy
-from filters.sqlalchemy import Field
 
 __author__  = 'Simone Pandolfi'
 __email__   = '<simopandolfi@gmail.com>'
