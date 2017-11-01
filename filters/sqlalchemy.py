@@ -18,12 +18,7 @@ MODIFIERS      = {
 }
 
 
-def modelname(model):
-    return '__'.join(model['fullname'])
-
-
-def datatype(field: Field) -> str:
-    DATA_TYPES = {
+DATA_TYPES = {
         'double'   : 'Float',
         'float'    : 'Float',
         'int32'    : 'Integer',
@@ -45,6 +40,13 @@ def datatype(field: Field) -> str:
         'string'   : 'String',
         'bytes'    : 'LargeBinary',
     }
+
+
+# def modelname(model):
+#     return '__'.join(model['fullname'])
+
+
+def datatype(field: Field) -> str:
     datatype_ = field.datatype
     if isinstance(datatype_, Model):
         return "'" + '__'.join(datatype_.get_fullname()) + "'"
@@ -53,39 +55,47 @@ def datatype(field: Field) -> str:
     raise TypeError('Unknown data type: {0}'.format(datatype_))
 
 
-def column_constraints(field):
-    return ('{0}={1}'.format(MODIFIERS.get(k, k), ''.join(v)) for k, v in field['modifiers'].items() if k in MODIFIERS or k.startswith(BUILDER_PREFIX))
+def constraints_declaration(field: Field) -> str:
+    constraints = ', '.join(('{0}={1}'.format(k, v) for k, v in field.modifiers.items()))
+    if len(constraints) > 0:
+        return ', {0}'.format(constraints)
+    return ''
 
 
-def column_constraints_count(field):
-    i = 0
-    for c in column_constraints(field):
-        i += 1
-    return i
+# def column_constraints(field):
+#     return ('{0}={1}'.format(MODIFIERS.get(k, k), ''.join(v)) for k, v in field['modifiers'].items() if k in MODIFIERS or k.startswith(BUILDER_PREFIX))
 
 
-def association_tablename(field):
-    return 'association_table___{0}___{1}'.format(modelname(field['parent']), modelname(field['data_type']))
+# def column_constraints_count(field):
+#     i = 0
+#     for c in column_constraints(field):
+#         i += 1
+#     return i
 
 
-def association_foreignkeys_dict(field):
+# def association_tablename(field):
+#     return 'association_table___{0}___{1}'.format(modelname(field['parent']), modelname(field['data_type']))
 
-    def kv(f, m):
-        model_name = modelname(m)  #field['parent'])
-        field_name = f['name']
-        return "'{0}___{1}'".format(model_name, field_name), "'{0}.{1}'".format(model_name, field_name)
 
-    parent_keyfields   = [kv(keyfield, field['parent']) for keyfield in core.key_fields(field['parent'])]
-    datatype_keyfields = [kv(keyfield, field['data_type']) for keyfield in core.key_fields(field['data_type'])]
-    return OrderedDict(itertools.chain(parent_keyfields, datatype_keyfields))
+# def association_foreignkeys_dict(field):
+#
+#     def kv(f, m):
+#         model_name = modelname(m)  #field['parent'])
+#         field_name = f['name']
+#         return "'{0}___{1}'".format(model_name, field_name), "'{0}.{1}'".format(model_name, field_name)
+#
+#     parent_keyfields   = [kv(keyfield, field['parent']) for keyfield in core.key_fields(field['parent'])]
+#     datatype_keyfields = [kv(keyfield, field['data_type']) for keyfield in core.key_fields(field['data_type'])]
+#     return OrderedDict(itertools.chain(parent_keyfields, datatype_keyfields))
 
 
 
 FILTERS = {
-    'sqlalchemy.modelname'                   : modelname,
+    # 'sqlalchemy.modelname'                   : modelname,
     'sqlalchemy.datatype'                    : datatype,
-    'sqlalchemy.column_constraints'          : column_constraints,
-    'sqlalchemy.column_constraints_count'    : column_constraints_count,
-    'sqlalchemy.association_tablename'       : association_tablename,
-    'sqlalchemy.association_foreignkeys_dict': association_foreignkeys_dict,
+    'sqlalchemy.constraints_declaration'     : constraints_declaration,
+    # 'sqlalchemy.column_constraints'          : column_constraints,
+    # 'sqlalchemy.column_constraints_count'    : column_constraints_count,
+    # 'sqlalchemy.association_tablename'       : association_tablename,
+    # 'sqlalchemy.association_foreignkeys_dict': association_foreignkeys_dict,
 }

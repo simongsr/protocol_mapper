@@ -19,9 +19,9 @@ class {{ model.name }}(Base):
 
     {% for fieldname, field in model.fields.items() %}
         {% if field.kind in ('required', 'optional') %}
-    {{ fieldname }} = Column({{ field|sqlalchemy.datatype }})
+    {{ fieldname }} = Column({{ field|sqlalchemy.datatype }}{{ field|sqlalchemy.constraints_declaration }})
         {% else %}
-    {{fieldname}} = relationship()
+    {{fieldname}} = relationship({{ field|sqlalchemy.datatype }}{{ field|sqlalchemy.constraints_declaration }})
         {% endif %}
     {% endfor %}
 
