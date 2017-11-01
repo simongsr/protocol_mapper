@@ -13,8 +13,12 @@ __version__ = (0, 0, 1)
 BUILDER_NAME   = __name__.split('.')[-1]
 BUILDER_PREFIX = BUILDER_NAME + '__'
 
-MODIFIERS      = {
-    'backref': 'backref',
+COLUMN_ATTRIBUTES = {
+    'key'                         : 'primary_key',
+    'backref'                     : 'backref',
+    'unique'                      : 'unique',
+    BUILDER_PREFIX + 'primary_key': 'primary_key',
+    BUILDER_PREFIX + 'unique'     : 'unique',
 }
 
 
@@ -42,6 +46,14 @@ DATA_TYPES = {
     }
 
 
+# def __remove_module_prefix(s: str) -> str:
+#     try:
+#         return s[s.index(BUILDER_PREFIX):]
+#     except ValueError:
+#         pass
+#     return s
+
+
 # def modelname(model):
 #     return '__'.join(model['fullname'])
 
@@ -56,7 +68,7 @@ def datatype(field: Field) -> str:
 
 
 def constraints_declaration(field: Field) -> str:
-    constraints = ', '.join(('{0}={1}'.format(k, v) for k, v in field.modifiers.items()))
+    constraints = ', '.join(('{0}={1}'.format(COLUMN_ATTRIBUTES[k], v) for k, v in field.modifiers.items() if k in COLUMN_ATTRIBUTES))
     if len(constraints) > 0:
         return ', {0}'.format(constraints)
     return ''

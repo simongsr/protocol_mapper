@@ -18,10 +18,14 @@ class {{ model.name }}(Base):
     __tablename__ = '{{ model.name }}'
 
     {% for fieldname, field in model.fields.items() %}
-        {% if field.kind in ('required', 'optional') %}
+        {% if field|core.is_raw_type %}
+            {% if field.kind in ('required', 'optional') %}
     {{ fieldname }} = Column({{ field|sqlalchemy.datatype }}{{ field|sqlalchemy.constraints_declaration }})
-        {% else %}
+            {% else %}
     {{fieldname}} = relationship({{ field|sqlalchemy.datatype }}{{ field|sqlalchemy.constraints_declaration }})
+            {% endif %}
+        {% else %}
+    {{ fieldname }}
         {% endif %}
     {% endfor %}
 
