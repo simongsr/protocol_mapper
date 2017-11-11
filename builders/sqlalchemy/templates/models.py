@@ -14,21 +14,31 @@ __version__ = {{ version }}
 """
 
 {% for model in schema.visit_models() %}
-class {{ model.name }}(Base):
-    __tablename__ = '{{ model.name }}'
+class {{ model|sqlalchemy.model_name }}(Base):
+    __tablename__ = '{{ model|sqlalchemy.model_name }}'
 
     {% for fieldname, field in model.fields.items() %}
         {% if field|core.is_raw_type %}
             {% if field.kind in ('required', 'optional') %}
     {{ fieldname }} = Column({{ field|sqlalchemy.datatype }}{{ field|sqlalchemy.constraints_declaration }})
             {% else %}
-    {{fieldname}} = relationship({{ field|sqlalchemy.datatype }}{{ field|sqlalchemy.constraints_declaration }})
+    {{ fieldname }} = relationship({{ field|sqlalchemy.datatype }}{{ field|sqlalchemy.constraints_declaration }})  # TODO modificare: deve riferirsi ad un modello che contenga il campo da valorizzare
             {% endif %}
         {% else %}
-    {{ fieldname }}
+            {% if field.kind in ('required', 'optional') %}
+    #{{ fieldname }} =
+            {% else %}
+    #{{fieldname}} = relationship({{ field|sqlalchemy.datatype }}{{ field|sqlalchemy.constraints_declaration }})
+            {% endif %}
         {% endif %}
     {% endfor %}
 
+    {% for submodel in model.models.values() %}
+    @staticmethod
+    def {{ submodel.name }}():
+        return {{ submodel|sqlalchemy.model_name }}
+
+    {% endfor %}
 
 {% endfor %}
 

@@ -2,6 +2,7 @@
 import importlib
 import json
 import os
+import pprint
 import re
 from collections import OrderedDict
 from datetime import date, datetime
@@ -588,7 +589,6 @@ def build(modules: list, buildername: str, params=[]):
     schema = Schema()
     for module in modules:
         schema.merge(module)
-
     schema.build_model_graph(modelcontainer=schema)
     schema.build_message_graph(messagecontainer=schema)
     schema.validate_services()
@@ -1182,11 +1182,12 @@ class Alias:
 
 
 class Schema:
-    __slots__ = ('__variables', '__aliases', '__models', '__messages', '__resources', '__services', '__reservations', '__mapped_fields')
+    __slots__ = ('__variables', '__aliases', '__enums', '__models', '__messages', '__resources', '__services', '__reservations', '__mapped_fields')
 
-    def __init__(self, variables=[], aliases=[], models=[], messages=[], resources=[], services=[], reservations=set()):
+    def __init__(self, variables=[], aliases=[], enums=[], models=[], messages=[], resources=[], services=[], reservations=set()):
         self.__variables     = OrderedDict()
         self.__aliases       = OrderedDict()
+        self.__enums         = OrderedDict()
         self.__models        = OrderedDict()
         self.__messages      = OrderedDict()
         self.__resources     = OrderedDict()
@@ -1201,6 +1202,7 @@ class Schema:
         return {
             Variable   : self.__variables,
             Alias      : self.__aliases,
+            Enum       : self.__enums,
             Model      : self.__models,
             Message    : self.__messages,
             Resource   : self.__resources,
@@ -1212,6 +1214,7 @@ class Schema:
         return {
             Variable   : lambda: DuplicatedVariableException('Duplicated variable {0}'.format(name)),
             Alias      : lambda: DuplicatedAliasException('Duplicated alias {0}'.format(name)),
+            Enum       : lambda: DuplicatedEnumException('Duplicated enum {0}'.format(name)),
             Model      : lambda: DuplicatedModelException('Duplicated model {0}'.format(name)),
             Message    : lambda: DuplicatedMessageException('Duplicated message {0}'.format(name)),
             Resource   : lambda: DuplicatedResourceException('Duplicated resource {0}'.format(name)),
@@ -1230,6 +1233,10 @@ class Schema:
     @property
     def aliases(self):
         return self.__aliases
+
+    @property
+    def enums(self):
+        return self.__enums
 
     @property
     def models(self):
@@ -1310,7 +1317,7 @@ class Schema:
                         reverse_reference_field = Field(backref_name, - field.id, field.parent, 'repeated', parent=refdatastruct)
                         refdatastruct.add_field(reverse_reference_field)
 
-                    self.build_model_graph(modelcontainer=model)
+            self.build_model_graph(modelcontainer=model)
 
     def build_message_graph(self, messagecontainer):
 
@@ -1356,7 +1363,7 @@ class Schema:
                         # reverse_reference_field = Field('{0}_set'.format(message.fullname.lower()), None, field.parent, 'repeated', parent=refdatastruct)
                         # refdatastruct.add_message(reverse_reference_field)
 
-                self.build_message_graph(messagecontainer=message)
+            self.build_message_graph(messagecontainer=message)
 
     def validate_resources(self):
 

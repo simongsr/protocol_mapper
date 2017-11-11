@@ -101,6 +101,10 @@ def constraints_declaration(field: Field) -> str:
 #     return OrderedDict(itertools.chain(parent_keyfields, datatype_keyfields))
 
 
+def model_name(model: Model) -> str:
+    return '__'.join(model.get_fullname())
+
+
 
 FILTERS = {
     # 'sqlalchemy.modelname'                   : modelname,
@@ -110,4 +114,5 @@ FILTERS = {
     # 'sqlalchemy.column_constraints_count'    : column_constraints_count,
     # 'sqlalchemy.association_tablename'       : association_tablename,
     # 'sqlalchemy.association_foreignkeys_dict': association_foreignkeys_dict,
+    'sqlalchemy.model_name'                  : model_name,
 }
